@@ -1,11 +1,14 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+
 from app.api import files, thumbnails, tags, logos
 from app.config import settings
 from app.services.auto_tag_service import run_auto_tag_impl
@@ -75,3 +78,24 @@ app.include_router(logos.router, prefix="/api/logos", tags=["logos"])
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "smb_connected": True}
+
+# Serve frontend static files (same origin as API = no CORS, works with any client URL)
+STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
+if os.path.isdir(STATIC_DIR):
+
+    @app.get("/{full_path:path}")
+    async def serve_static_or_spa(request: Request, full_path: str):
+        """Serve static files or index.html for SPA; API routes are already handled above."""
+        if request.url.path.startswith("/api/"):
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+        safe_path = full_path.strip("/") or "index.html"
+        if safe_path != "index.html":
+            file_path = os.path.join(STATIC_DIR, safe_path)
+            if os.path.isfile(file_path):
+                return FileResponse(file_path)
+        index_path = os.path.join(STATIC_DIR, "index.html")
+        if os.path.isfile(index_path):
+            return FileResponse(index_path)
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": "Not Found"}, status_code=404)

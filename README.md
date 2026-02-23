@@ -25,7 +25,7 @@ A web-based file manager for embroidery files that connects to a Samba share. Su
 
 ## Getting started
 
-Edit `.env` with your SMB details (and optional `VITE_API_URL`) before or after the first run. One-shot setup and run:
+Edit `.env` with your SMB details before or after the first run. One-shot setup and run:
 
 ```bash
 git clone https://github.com/jedman14/embroidery_file_manager.git
@@ -58,12 +58,11 @@ DEBUG=false
 # OPENAI_API_KEY=sk-...
 ```
 
-For the frontend to reach the API when running in Docker, set `VITE_API_URL` in `.env` to your backend URL (e.g. `http://localhost:8001` or your machine’s IP). The compose file may override this for your environment.
+The app is a single service (backend serves frontend on same origin). Open it by hostname or IP (e.g. `http://dock.home:8001` or `http://localhost:8001`); no per-machine API URL needed.
 
 ## Running
 
-- **Frontend**: http://localhost:5174  
-- **Backend API**: http://localhost:8001  
+- **App (UI + API)**: http://localhost:8001  
 
 To use **image-based tag suggestions**, pull and run the vision model:
 
@@ -115,8 +114,8 @@ docker compose down
 │   │   ├── routes/
 │   │   └── app.html
 │   ├── package.json
-│   ├── svelte.config.js
-│   └── Dockerfile
+│   └── svelte.config.js
+├── Dockerfile             # single image: frontend build + backend
 ├── docker-compose.yml
 ├── .env.example
 └── README.md

@@ -33,7 +33,7 @@ class ThumbnailService:
     
     def _get_cache_path(self, file_path: str, size: Tuple[int, int] = THUMBNAIL_SIZE) -> str:
         """Get cache path for thumbnail"""
-        cache_dir = "/app/thumbnails"
+        cache_dir = os.environ.get("THUMBNAIL_CACHE_DIR", "/app/data/thumbnails")
         file_hash = hashlib.md5(file_path.encode()).hexdigest()
         size_str = f"{size[0]}x{size[1]}"
         return os.path.join(cache_dir, f"{file_hash}_{size_str}.png")

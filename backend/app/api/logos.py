@@ -8,8 +8,9 @@ from PIL import Image
 
 router = APIRouter()
 
-LOGOS_FILE = os.environ.get('LOGOS_FILE', '/app/data/folder_logos.json')
-LOGOS_DIR = os.environ.get('LOGOS_DIR', '/app/logos')
+_app_data = os.environ.get('APP_DATA_DIR', '/app/data')
+LOGOS_FILE = os.environ.get('LOGOS_FILE', os.path.join(_app_data, 'folder_logos.json'))
+LOGOS_DIR = os.environ.get('LOGOS_DIR', os.path.join(_app_data, 'logos'))
 LOGO_SIZE = (128, 128)
 
 def load_logos():

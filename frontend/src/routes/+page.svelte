@@ -335,7 +335,8 @@
     extractModal = file.path;
     extractDestination = $currentPath;
     try {
-      const resp = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/files?path=${encodeURIComponent($currentPath)}`);
+      const apiBase = (typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL) || '';
+      const resp = await fetch(`${apiBase}/api/files?path=${encodeURIComponent($currentPath)}`);
       const data = await resp.json();
       extractFolders = data.items.filter(i => i.is_directory);
     } catch { extractFolders = []; }

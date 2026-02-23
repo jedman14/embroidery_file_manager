@@ -1,34 +1,16 @@
 services:
-  backend:
+  app:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
-    container_name: embroidery-backend
+    container_name: embroidery-app
     ports:
       - "8001:8000"
     env_file:
       - .env
     volumes:
-      - ./volumes/thumbnails:/app/thumbnails
-      - ./volumes/logos:/app/logos
-      - ./volumes/data:/app/data
-    networks:
-      - embroidery-network
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: embroidery-frontend
-    ports:
-      - "5174:5173"
-    env_file:
-      - .env
-    environment:
-      - VITE_API_URL=http://192.168.111.208:8001
-    depends_on:
-      - backend
+      # Single volume: app uses /app/data/thumbnails, /app/data/logos, /app/data/*.json
+      - ./volumes/app:/app/data
     networks:
       - embroidery-network
     restart: unless-stopped

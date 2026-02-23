@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = (typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL) || '';
 
 function createThemeStore() {
   const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('theme') : null;
