@@ -8,7 +8,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from rapidfuzz import fuzz
-from app.services.smb_service import SMBService
+from app.services.metadata_migration import migrate_metadata
 
 EMBROIDERY_EXTENSIONS = {
     '.dst': 'Tajima',
@@ -36,8 +36,8 @@ IMAGE_EXTENSIONS = {
 PDF_EXTENSIONS = {'.pdf': 'PDF'}
 
 class FileService:
-    def __init__(self, smb_service: SMBService):
-        self.smb = smb_service
+    def __init__(self, storage):  # SMBService, LocalStorageService, or StorageRouter
+        self._storage = storage
     
     def get_file_type(self, filename: str) -> str:
         """Detect file type from extension (embroidery, image, PDF, or Unknown)"""
@@ -55,7 +55,7 @@ class FileService:
     
     async def list_directory(self, path: str) -> List[dict]:
         """List directory contents with file type detection"""
-        items = self.smb.list_directory(path)
+        items = self._storage.list_directory(path)
         
         for item in items:
             item['file_type'] = self.get_file_type(item['name'])
@@ -72,7 +72,7 @@ class FileService:
             queue = deque([root] if root else [""])
             while queue and len(items) < max_items:
                 dir_path = queue.popleft()
-                for item in self.smb.list_directory(dir_path):
+                for item in self._storage.list_directory(dir_path):
                     if item['name'] in ('.', '..'):
                         continue
                     item['file_type'] = self.get_file_type(item['name'])
@@ -240,10 +240,10 @@ class FileService:
     
     async def get_file_info(self, path: str) -> dict:
         """Get detailed file information"""
-        if not self.smb.file_exists(path):
+        if not self._storage.file_exists(path):
             raise FileNotFoundError(f"File not found: {path}")
         
-        items = self.smb.list_directory(os.path.dirname(path))
+        items = self._storage.list_directory(os.path.dirname(path))
         filename = os.path.basename(path)
         
         for item in items:
@@ -276,7 +276,7 @@ class FileService:
             by_parent.setdefault(parent, []).append(p)
         result = []
         for parent, child_paths in by_parent.items():
-            items = self.smb.list_directory(parent)
+            items = self._storage.list_directory(parent)
             for item in items:
                 if item.get("path") in child_paths:
                     item["file_type"] = self.get_file_type(item["name"])
@@ -302,7 +302,7 @@ class FileService:
     
     async def stream_file(self, path: str):
         """Stream file content for download"""
-        data = self.smb.get_file(path)
+        data = self._storage.get_file(path)
         
         from fastapi.responses import StreamingResponse
         return StreamingResponse(
@@ -316,10 +316,10 @@ class FileService:
         filename = os.path.basename(path)
         dir_path = os.path.dirname(path)
         
-        if dir_path and not self.smb.file_exists(dir_path):
-            self.smb.create_directory_recursive(dir_path)
+        if dir_path and not self._storage.file_exists(dir_path):
+            self._storage.create_directory_recursive(dir_path)
         
-        self.smb.put_file(path, data)
+        self._storage.put_file(path, data)
         
         return {
             "success": True,
@@ -333,8 +333,8 @@ class FileService:
         dir_path = os.path.dirname(path)
         new_path = os.path.join(dir_path, new_name).replace('\\', '/')
         
-        self.smb.rename(path, new_path)
-        
+        self._storage.rename(path, new_path)
+        migrate_metadata(path, new_path)
         return {
             "success": True,
             "old_path": path,
@@ -343,7 +343,7 @@ class FileService:
     
     async def create_folder(self, path: str) -> dict:
         """Create a new folder"""
-        self.smb.create_directory(path)
+        self._storage.create_directory(path)
         return {
             "success": True,
             "path": path,
@@ -353,10 +353,10 @@ class FileService:
     async def delete_file(self, path: str) -> dict:
         """Delete a single file or folder"""
         try:
-            if self.smb.is_directory(path):
-                self.smb.delete_directory_recursive(path)
+            if self._storage.is_directory(path):
+                self._storage.delete_directory_recursive(path)
             else:
-                self.smb.delete_file(path)
+                self._storage.delete_file(path)
             return {"success": True, "deleted": [path]}
         except Exception as e:
             return {"success": False, "deleted": [], "error": str(e)}
@@ -367,10 +367,10 @@ class FileService:
         errors = []
         for path in paths:
             try:
-                if self.smb.is_directory(path):
-                    self.smb.delete_directory_recursive(path)
+                if self._storage.is_directory(path):
+                    self._storage.delete_directory_recursive(path)
                 else:
-                    self.smb.delete_file(path)
+                    self._storage.delete_file(path)
                 deleted.append(path)
             except Exception as e:
                 errors.append(f"{path}: {str(e)}")
@@ -384,8 +384,8 @@ class FileService:
         if not destination.endswith(filename):
             destination = os.path.join(destination, filename).replace('\\', '/')
         
-        self.smb.move(source, destination)
-        
+        self._storage.move(source, destination)
+        migrate_metadata(source, destination)
         return {
             "success": True,
             "source": source,
@@ -394,13 +394,13 @@ class FileService:
     
     async def extract_zip(self, zip_path: str, destination: str = "") -> dict:
         """Extract a zip file"""
-        zip_data = self.smb.get_file(zip_path)
+        zip_data = self._storage.get_file(zip_path)
         
         if not destination:
             destination = zip_path.rsplit('.', 1)[0]
         
         destination = destination.strip('/')
-        self.smb.create_directory_recursive(destination)
+        self._storage.create_directory_recursive(destination)
         
         extracted = []
         created_dirs = set()
@@ -413,11 +413,11 @@ class FileService:
                 member_path = f"{destination}/{member}".replace('\\', '/')
                 parent_dir = os.path.dirname(member_path)
                 if parent_dir and parent_dir not in created_dirs:
-                    self.smb.create_directory_recursive(parent_dir)
+                    self._storage.create_directory_recursive(parent_dir)
                     created_dirs.add(parent_dir)
                 
                 data = zf.read(member)
-                self.smb.put_file(member_path, data)
+                self._storage.put_file(member_path, data)
                 extracted.append(member_path)
         
         return {
@@ -428,7 +428,7 @@ class FileService:
     
     async def get_zip_contents(self, zip_path: str) -> dict:
         """List contents of a zip file without extracting"""
-        zip_data = self.smb.get_file(zip_path)
+        zip_data = self._storage.get_file(zip_path)
         
         contents = []
         

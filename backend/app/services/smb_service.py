@@ -9,7 +9,16 @@ class SMBService:
     def __init__(self):
         self.conn: Optional[SMBConnection] = None
         self.share = settings.smb_share
-    
+
+    def _disconnect(self) -> None:
+        """Drop connection so next connect() creates a new one."""
+        if self.conn is not None:
+            try:
+                self.conn.close()
+            except Exception:
+                pass
+            self.conn = None
+
     def connect(self) -> SMBConnection:
         """Establish SMB connection"""
         if self.conn is None or not self.conn.sock:
@@ -23,23 +32,31 @@ class SMBService:
             )
             self.conn.connect(settings.smb_host, settings.smb_port)
         return self.conn
-    
+
+    def _on_connection_error(self) -> None:
+        """Call when a socket/connection error occurs so we reconnect next time."""
+        self._disconnect()
+
     def list_directory(self, path: str) -> List[dict]:
         """List contents of a directory on SMB share"""
-        conn = self.connect()
         path = path.strip('/')
         if path:
             path = path + "/"
-        try:
-            files = conn.listPath(self.share, path)
-        except Exception:
-            if path == "":
-                try:
-                    files = conn.listPath(self.share, ".")
-                except Exception:
+        # Use "" for root; some SMB servers fail with "."
+        list_path = path
+        last_err = None
+        for attempt in range(2):
+            try:
+                conn = self.connect()
+                files = conn.listPath(self.share, list_path)
+                break
+            except (OSError, ConnectionError, BrokenPipeError) as e:
+                last_err = e
+                self._on_connection_error()
+                if attempt == 1:
                     raise
-            else:
-                raise
+        else:
+            raise last_err or RuntimeError("list_directory failed")
         items = []
         for f in files:
             if f.filename in ['.', '..']:

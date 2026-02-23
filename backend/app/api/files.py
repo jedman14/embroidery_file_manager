@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from pydantic import BaseModel
 
-from app.services.smb_service import SMBService
+from app.services.storage_factory import get_storage
 from app.services.file_service import FileService
 from app.services.thumbnail_service import ThumbnailService
 from app.services.auto_tag_service import suggest_and_save_tags, is_embroidery_file
@@ -20,9 +20,9 @@ from app.services.conversion_service import (
 )
 
 router = APIRouter()
-smb_service = SMBService()
-file_service = FileService(smb_service)
-thumbnail_service = ThumbnailService(smb_service)
+_storage = get_storage()
+file_service = FileService(_storage)
+thumbnail_service = ThumbnailService(_storage)
 
 
 def _normalize_path(p: str) -> str:
@@ -90,7 +90,7 @@ async def convert_embroidery_file(request: ConvertRequest):
     if not is_writable_format(tgt_fmt):
         raise HTTPException(status_code=400, detail=f"Unsupported target format: {request.target_format}")
 
-    if not smb_service.file_exists(src):
+    if not _storage.file_exists(src):
         raise HTTPException(status_code=404, detail="File not found")
 
     ext = Path(src).suffix.lower()
@@ -98,7 +98,7 @@ async def convert_embroidery_file(request: ConvertRequest):
         raise HTTPException(status_code=400, detail=f"Unsupported source format: {ext}")
 
     try:
-        source_bytes = smb_service.get_file(src)
+        source_bytes = _storage.get_file(src)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Cannot read file: {e}")
 
@@ -154,7 +154,7 @@ async def get_embroidery_info(full_path: str):
     ext = Path(full_path).suffix.lower()
     if not is_readable_format(ext):
         raise HTTPException(status_code=404, detail="Not an embroidery file or unsupported format")
-    if not smb_service.file_exists(full_path):
+    if not _storage.file_exists(full_path):
         raise HTTPException(status_code=404, detail="File not found")
     try:
         return thumbnail_service.get_embroidery_metadata(full_path)
@@ -171,7 +171,7 @@ async def get_embroidery_info_batch(request: PathsRequest):
         if not path:
             continue
         ext = Path(path).suffix.lower()
-        if not is_readable_format(ext) or not smb_service.file_exists(path):
+        if not is_readable_format(ext) or not _storage.file_exists(path):
             continue
         try:
             data = thumbnail_service.get_embroidery_metadata(path)

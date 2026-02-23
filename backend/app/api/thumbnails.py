@@ -1,11 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
-from app.services.smb_service import SMBService
+from app.services.storage_factory import get_storage
 from app.services.thumbnail_service import ThumbnailService, PREVIEW_SIZE
 
 router = APIRouter()
-smb_service = SMBService()
-thumbnail_service = ThumbnailService(smb_service)
+thumbnail_service = ThumbnailService(get_storage())
 
 @router.get("/preview/{full_path:path}")
 async def get_preview(full_path: str):

@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import List
 
-from app.services.smb_service import SMBService
+from app.services.storage_factory import get_storage
 from app.services.file_service import FileService
 from app.services.thumbnail_service import ThumbnailService, PREVIEW_SIZE
 from app.services.vision_service import suggest_tags_from_image
@@ -29,9 +29,9 @@ def is_embroidery_file(path: str) -> bool:
     return _is_embroidery_file(path)
 
 
-_smb = SMBService()
-_thumbnail_service = ThumbnailService(_smb)
-_file_service = FileService(_smb)
+_storage = get_storage()
+_thumbnail_service = ThumbnailService(_storage)
+_file_service = FileService(_storage)
 
 
 async def suggest_and_save_tags(path: str) -> List[str] | None:

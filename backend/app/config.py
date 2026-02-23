@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     smb_username: str = "embroidery"
     smb_password: str = ""  # Set via SMB_PASSWORD env; no default
     smb_port: int = 445
+    file_source: str = "smb"  # "smb" | "local" | "both"
+    local_mount_path: str = ""  # e.g. /mnt/embroidery; required when file_source is local or both
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     debug: bool = False

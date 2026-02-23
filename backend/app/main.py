@@ -78,7 +78,19 @@ app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy", "smb_connected": True}
+    src = (settings.file_source or "smb").strip().lower()
+    out = {"status": "healthy"}
+    if src in ("smb", "both"):
+        try:
+            from app.services.storage_factory import get_smb_service
+            get_smb_service().connect()
+            out["smb_connected"] = True
+        except Exception:
+            out["smb_connected"] = False
+    if src in ("local", "both") and settings.local_mount_path:
+        from pathlib import Path
+        out["local_mount_ok"] = Path(settings.local_mount_path).resolve().is_dir()
+    return out
 
 # Serve frontend static files (same origin as API = no CORS, works with any client URL)
 STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")

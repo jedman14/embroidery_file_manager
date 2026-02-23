@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 
-from app.services.smb_service import SMBService
+from app.services.storage_factory import get_storage
 from app.services.thumbnail_service import ThumbnailService, PREVIEW_SIZE
 from app.services.vision_service import suggest_tags_from_image
 from app.services.tag_storage import (
@@ -28,8 +28,7 @@ def _is_embroidery_file(path: str) -> bool:
     return Path(path).suffix.lower() in EMBROIDERY_EXTENSIONS
 
 
-_smb = SMBService()
-_thumbnail_service = ThumbnailService(_smb)
+_thumbnail_service = ThumbnailService(get_storage())
 
 
 def _entries_from_string_list(tag_list: List[str]) -> list:

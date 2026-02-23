@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING, Dict, List, Tuple, Any
 import pyembroidery
 from PIL import Image, ImageDraw
 
-from app.services.smb_service import SMBService
-
 if TYPE_CHECKING:
     from PIL import Image
 
@@ -35,8 +33,8 @@ DEFAULT_PALETTE = [
 
 
 class ThumbnailService:
-    def __init__(self, smb_service: SMBService):
-        self.smb = smb_service
+    def __init__(self, storage):  # SMBService, LocalStorageService, or StorageRouter
+        self._storage = storage
     
     def _get_cache_path(self, file_path: str, size: Tuple[int, int] = THUMBNAIL_SIZE) -> str:
         """Get cache path for thumbnail"""
@@ -63,7 +61,7 @@ class ThumbnailService:
     
     async def _generate_thumbnail(self, file_path: str, size: Tuple[int, int]) -> bytes:
         """Generate thumbnail for embroidery, image, or PDF file"""
-        file_data = self.smb.get_file(file_path)
+        file_data = self._storage.get_file(file_path)
         ext = Path(file_path).suffix.lower()
 
         if ext in IMAGE_EXTENSIONS:
@@ -248,7 +246,7 @@ class ThumbnailService:
         import tempfile
         ext = Path(file_path).suffix.lower()
         try:
-            file_data = self.smb.get_file(file_path)
+            file_data = self._storage.get_file(file_path)
         except Exception as e:
             logger.warning("get_embroidery_metadata: cannot read file %s: %s", file_path, e)
             raise
