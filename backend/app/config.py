@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     smb_host: str = "smb"
     smb_share: str = "embroidery"
     smb_username: str = "embroidery"
-    smb_password: str = "embroidery123"
+    smb_password: str = ""  # Set via SMB_PASSWORD env; no default
     smb_port: int = 445
     app_host: str = "0.0.0.0"
     app_port: int = 8000
