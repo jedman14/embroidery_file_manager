@@ -9,9 +9,9 @@ services:
     env_file:
       - .env
     volumes:
-      - thumbnails:/app/thumbnails
-      - logos:/app/logos
-      - data:/app/data
+      - ./volumes/thumbnails:/app/thumbnails
+      - ./volumes/logos:/app/logos
+      - ./volumes/data:/app/data
     networks:
       - embroidery-network
     restart: unless-stopped
@@ -37,15 +37,9 @@ services:
     image: ollama/ollama
     container_name: embroidery-ollama
     volumes:
-      - ollama-data:/root/.ollama
+      - ./volumes/ollama-data:/root/.ollama
     networks:
       - embroidery-network
-
-volumes:
-  thumbnails:
-  logos:
-  data:
-  ollama-data:
 
 networks:
   embroidery-network:

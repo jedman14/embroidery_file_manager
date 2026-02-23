@@ -42,6 +42,9 @@ temp/
 # Docker
 .docker/
 
+# Compose bind mounts
+volumes/
+
 # Test / coverage
 .coverage
 htmlcov/
