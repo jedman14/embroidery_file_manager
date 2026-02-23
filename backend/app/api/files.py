@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.services.smb_service import SMBService
 from app.services.file_service import FileService
+from app.services.thumbnail_service import ThumbnailService
 from app.services.auto_tag_service import suggest_and_save_tags, is_embroidery_file
 from app.services.conversion_service import (
     convert_embroidery,
@@ -21,6 +22,7 @@ from app.services.conversion_service import (
 router = APIRouter()
 smb_service = SMBService()
 file_service = FileService(smb_service)
+thumbnail_service = ThumbnailService(smb_service)
 
 
 def _normalize_path(p: str) -> str:
@@ -142,6 +144,51 @@ async def get_files_info(request: PathsRequest):
         return {"items": items}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{full_path:path}/embroidery-info")
+async def get_embroidery_info(full_path: str):
+    """Get thread/color metadata for an embroidery file."""
+    full_path = _normalize_path(full_path)
+    if not full_path:
+        raise HTTPException(status_code=400, detail="Path required")
+    ext = Path(full_path).suffix.lower()
+    if not is_readable_format(ext):
+        raise HTTPException(status_code=404, detail="Not an embroidery file or unsupported format")
+    if not smb_service.file_exists(full_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    try:
+        return thumbnail_service.get_embroidery_metadata(full_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/embroidery-info-batch")
+async def get_embroidery_info_batch(request: PathsRequest):
+    """Get embroidery metadata (for filtering) for multiple paths. Skips non-embroidery; returns empty for unreadable."""
+    result = []
+    for path in request.paths or []:
+        path = _normalize_path(path)
+        if not path:
+            continue
+        ext = Path(path).suffix.lower()
+        if not is_readable_format(ext) or not smb_service.file_exists(path):
+            continue
+        try:
+            data = thumbnail_service.get_embroidery_metadata(path)
+            result.append({
+                "path": path,
+                "color_count": data.get("color_count", 0),
+                "color_changes": data.get("color_changes", 0),
+                "width_mm": data.get("width_mm", 0),
+                "height_mm": data.get("height_mm", 0),
+                "width_in": data.get("width_in", 0),
+                "height_in": data.get("height_in", 0),
+                "hoop_label": data.get("hoop_label"),
+            })
+        except Exception:
+            continue
+    return {"items": result}
+
 
 @router.get("/{full_path:path}/download")
 async def download_file(full_path: str):

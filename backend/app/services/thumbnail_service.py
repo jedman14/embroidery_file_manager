@@ -3,7 +3,7 @@ import os
 import io
 import hashlib
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING, Dict, List, Tuple, Any
 
 import pyembroidery
 from PIL import Image, ImageDraw
@@ -187,6 +187,10 @@ class ThumbnailService:
             if command == pyembroidery.COLOR_CHANGE:
                 if len(stitch) > 3:
                     current_color_idx = stitch[3]
+                else:
+                    current_color_idx += 1
+                num_colors = len(threads) if threads else len(DEFAULT_PALETTE)
+                current_color_idx = current_color_idx % num_colors if num_colors else 0
                 current_color = self._get_thread_color(threads, current_color_idx)
                 prev_x, prev_y = None, None
                 continue
@@ -201,6 +205,20 @@ class ThumbnailService:
             
             prev_x = x
             prev_y = y
+        
+        # Hoop size overlay (design dimensions in 0.1mm units)
+        width_mm = round((max_x - min_x) / 10.0, 1)
+        height_mm = round((max_y - min_y) / 10.0, 1)
+        width_in = round(width_mm / 25.4, 2)
+        height_in = round(height_mm / 25.4, 2)
+        hoop_label = f"{width_in}\u00d7{height_in} in"
+        try:
+            from PIL import ImageFont
+            font = ImageFont.load_default()
+        except Exception:
+            font = None
+        text_y = size[1] - 14
+        draw.text((8, text_y), hoop_label, fill="#333333", font=font)
         
         return self._image_to_bytes(img, size)
     
@@ -224,6 +242,70 @@ class ThumbnailService:
             min(255, max(0, rgb[1])),
             min(255, max(0, rgb[2]))
         )
+
+    def get_embroidery_metadata(self, file_path: str) -> Dict[str, Any]:
+        """Read embroidery file and return color_count and list of thread colors (hex, catalog_number, description)."""
+        import tempfile
+        ext = Path(file_path).suffix.lower()
+        try:
+            file_data = self.smb.get_file(file_path)
+        except Exception as e:
+            logger.warning("get_embroidery_metadata: cannot read file %s: %s", file_path, e)
+            raise
+        suffix = ext if ext.startswith('.') else '.' + ext
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+            f.write(file_data)
+            temp_path = f.name
+        try:
+            pattern = pyembroidery.read(temp_path)
+            if pattern is None:
+                return {"color_count": 0, "colors": [], "color_changes": 0, "width_mm": 0, "height_mm": 0, "width_in": 0, "height_in": 0, "hoop_label": None}
+            stitches = list(pattern.stitches)
+            color_changes = sum(1 for s in stitches if len(s) > 2 and s[2] == pyembroidery.COLOR_CHANGE)
+            width_mm = height_mm = width_in = height_in = 0.0
+            hoop_label = None
+            if stitches:
+                min_x = min(s[0] for s in stitches)
+                max_x = max(s[0] for s in stitches)
+                min_y = min(s[1] for s in stitches)
+                max_y = max(s[1] for s in stitches)
+                width_mm = round((max_x - min_x) / 10.0, 1)
+                height_mm = round((max_y - min_y) / 10.0, 1)
+                width_in = round(width_mm / 25.4, 2)
+                height_in = round(height_mm / 25.4, 2)
+                hoop_label = f"{width_in}×{height_in} in"
+            threads = pattern.threadlist if hasattr(pattern, 'threadlist') and pattern.threadlist else []
+            colors: List[Dict[str, Any]] = []
+            for idx, thread in enumerate(threads):
+                try:
+                    r = thread.get_red()
+                    g = thread.get_green()
+                    b = thread.get_blue()
+                    hex_color = self._rgb_to_hex((r, g, b))
+                except Exception:
+                    hex_color = DEFAULT_PALETTE[idx % len(DEFAULT_PALETTE)]
+                entry: Dict[str, Any] = {"hex": hex_color}
+                if hasattr(thread, 'catalog_number') and getattr(thread, 'catalog_number', None):
+                    entry["catalog_number"] = str(thread.catalog_number).strip() or None
+                else:
+                    entry["catalog_number"] = None
+                if hasattr(thread, 'description') and getattr(thread, 'description', None):
+                    entry["description"] = str(thread.description).strip() or None
+                else:
+                    entry["description"] = None
+                colors.append(entry)
+            return {
+                "color_count": len(colors),
+                "colors": colors,
+                "color_changes": color_changes,
+                "width_mm": width_mm,
+                "height_mm": height_mm,
+                "width_in": width_in,
+                "height_in": height_in,
+                "hoop_label": hoop_label,
+            }
+        finally:
+            os.unlink(temp_path)
     
     def _render_placeholder_thumbnail(self, ext: str, size: Tuple[int, int]) -> bytes:
         """Render placeholder thumbnail for unknown formats"""

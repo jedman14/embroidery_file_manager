@@ -41,7 +41,9 @@
     uploadFile,
     searchCurrentThenEverywhere,
     getConvertFormats,
-    convertFile
+    convertFile,
+    getEmbroideryInfo,
+    getEmbroideryInfoBatch
   } from '$lib/api.js';
 
   let renameModal = $state(null);
@@ -63,6 +65,9 @@
   let searchType = $state('all');
   let searchSize = $state('all');
   let searchTag = $state('');
+  let hoopFilter = $state('all');
+  let colorChangesFilter = $state('all');
+  let embroideryMetadata = $state({});
   let searchResults = $state(null); // { items, path, total } when q non-empty (current dir first, then everywhere)
   let availableTags = $state([]);
   let browsingZip = $state(null);
@@ -78,6 +83,9 @@
   let tagFilter = $state(null); // when set, view shows only files with this tag (same UX as folder)
   let tagViewFiles = $state([]);
   let tagViewLoading = $state(false);
+  let previewEmbroideryInfo = $state(null); // { color_count, colors: [{ hex, catalog_number?, description? }] }
+  let previewEmbroideryLoading = $state(false);
+  let previewEmbroideryError = $state(null);
   let convertModalFile = $state(null);
   let convertTargetFormat = $state('.dst');
   let convertSavePath = $state('');
@@ -135,7 +143,7 @@
     })
   );
 
-  let displayFiles = $derived.by(() => {
+  let listBeforeHoopFilter = $derived.by(() => {
     if (tagFilter) {
       const list = tagViewFiles;
       return list.filter(f => {
@@ -154,6 +162,47 @@
       });
     }
     return filteredFiles;
+  });
+
+  function fitsInHoop(widthIn, heightIn, hoopKey) {
+    if (hoopKey === 'all') return true;
+    const parts = hoopKey.split('x').map(Number);
+    if (parts.length !== 2 || parts.some(isNaN)) return true;
+    const [maxW, maxH] = parts;
+    const dMin = Math.min(widthIn, heightIn), dMax = Math.max(widthIn, heightIn);
+    const hMin = Math.min(maxW, maxH), hMax = Math.max(maxW, maxH);
+    return dMin <= hMin && dMax <= hMax;
+  }
+
+  let displayFiles = $derived.by(() => {
+    const list = listBeforeHoopFilter;
+    const hoop = hoopFilter;
+    const colorCap = colorChangesFilter;
+    const meta = embroideryMetadata;
+    return list.filter(f => {
+      if (f.is_directory || f.is_zip || !isEmbroideryFileType(f.file_type)) return true;
+      const m = meta[f.path];
+      if (!m) return true;
+      if (hoop !== 'all' && !fitsInHoop(m.width_in || 0, m.height_in || 0, hoop)) return false;
+      if (colorCap !== 'all') {
+        const cap = parseInt(colorCap, 10);
+        if (!isNaN(cap) && (m.color_changes ?? 0) > cap) return false;
+      }
+      return true;
+    });
+  });
+
+  $effect(() => {
+    const list = listBeforeHoopFilter;
+    const paths = list.filter(f => !f.is_directory && !f.is_zip && isEmbroideryFileType(f.file_type)).map(f => f.path);
+    if (paths.length === 0) {
+      embroideryMetadata = {};
+      return;
+    }
+    getEmbroideryInfoBatch(paths).then((r) => {
+      const items = r.items || [];
+      embroideryMetadata = Object.fromEntries(items.map((i) => [i.path, i]));
+    }).catch(() => { embroideryMetadata = {}; });
   });
 
   $effect(() => {
@@ -436,7 +485,24 @@
   function openPreviewModal(file) {
     previewFile = file;
     previewModal = true;
+    previewEmbroideryInfo = null;
+    previewEmbroideryError = null;
+    previewEmbroideryLoading = false;
     fetchTags(file.path);
+    if (file && !file.is_directory && !file.is_zip && isEmbroideryFileType(file.file_type)) {
+      previewEmbroideryLoading = true;
+      getEmbroideryInfo(file.path)
+        .then((data) => {
+          previewEmbroideryInfo = data;
+          previewEmbroideryError = null;
+        })
+        .catch((err) => {
+          previewEmbroideryError = err?.message || 'Color info unavailable';
+        })
+        .finally(() => {
+          previewEmbroideryLoading = false;
+        });
+    }
   }
 
   function openLogoModal(file) {
@@ -591,6 +657,21 @@
         placeholder="Filter by tag..." 
         bind:value={searchTag}
       />
+      <select class="filter-select" bind:value={hoopFilter} title="Show only files that fit in this hoop or smaller">
+        <option value="all">Hoop: Any</option>
+        <option value="4x4">Up to 4×4 in</option>
+        <option value="5x7">Up to 5×7 in</option>
+        <option value="6x10">Up to 6×10 in</option>
+        <option value="8x8">Up to 8×8 in</option>
+        <option value="9x12">Up to 9×12 in</option>
+      </select>
+      <select class="filter-select" bind:value={colorChangesFilter} title="Show only files with this many color changes or fewer">
+        <option value="all">Color changes: Any</option>
+        <option value="3">Up to 3</option>
+        <option value="5">Up to 5</option>
+        <option value="10">Up to 10</option>
+        <option value="20">Up to 20</option>
+      </select>
     </div>
     <div class="toolbar-right">
       <button class="btn" onclick={() => theme.toggle()}>
@@ -1006,6 +1087,37 @@
         </span>
         <span class="preview-size">{formatFileSize(previewFile.size)}</span>
       </div>
+      {#if isEmbroideryFileType(previewFile.file_type)}
+        <div class="preview-colors">
+          <span class="preview-colors-label">Colors:</span>
+          {#if previewEmbroideryLoading}
+            <span class="preview-colors-hint">Loading…</span>
+          {:else if previewEmbroideryError}
+            <span class="preview-colors-hint">{previewEmbroideryError}</span>
+          {:else if previewEmbroideryInfo}
+            <span class="preview-colors-count">
+              {previewEmbroideryInfo.color_count} thread(s)
+              {#if previewEmbroideryInfo.color_changes != null}
+                · {previewEmbroideryInfo.color_changes} color change(s)
+              {/if}
+              {#if previewEmbroideryInfo.hoop_label}
+                · Hoop: {previewEmbroideryInfo.hoop_label}
+              {/if}
+            </span>
+            {#if previewEmbroideryInfo.color_count > 0}
+              <div class="preview-swatches">
+                {#each previewEmbroideryInfo.colors as color}
+                  <span
+                    class="color-swatch"
+                    style="background-color: {color.hex};"
+                    title={[color.catalog_number, color.description].filter(Boolean).join(' · ') || color.hex}
+                  />
+                {/each}
+              </div>
+            {/if}
+          {/if}
+        </div>
+      {/if}
       {#if ($tags[previewFile.path] || []).length > 0}
         <div class="preview-tags">
           <span class="preview-tags-label">Tags:</span>
@@ -1641,6 +1753,11 @@
   .secondary-hint { font-size: 12px; color: var(--text-secondary); margin-right: auto; margin-left: 12px; }
   .preview-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color); }
   .preview-tags-label { font-size: 13px; color: var(--text-secondary); margin-right: 4px; }
+  .preview-colors { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color); }
+  .preview-colors-label { font-size: 13px; color: var(--text-secondary); margin-right: 4px; }
+  .preview-colors-hint, .preview-colors-count { font-size: 13px; color: var(--text-secondary); }
+  .preview-swatches { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .color-swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--border-color); flex-shrink: 0; }
 
   .modal-overlay {
     position: fixed;

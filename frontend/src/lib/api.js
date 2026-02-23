@@ -247,6 +247,26 @@ export function getPreviewUrl(path) {
   return `${API_URL}/api/thumbnails/preview/${encodeURIComponent(path)}`;
 }
 
+export async function getEmbroideryInfo(path) {
+  const response = await fetch(`${API_URL}/api/files/${encodeURIComponent(path)}/embroidery-info`);
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || response.statusText || 'Failed to load color info');
+  }
+  return response.json();
+}
+
+export async function getEmbroideryInfoBatch(paths) {
+  if (!paths?.length) return { items: [] };
+  const response = await fetch(`${API_URL}/api/files/embroidery-info-batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paths })
+  });
+  if (!response.ok) throw new Error('Failed to load embroidery metadata');
+  return response.json();
+}
+
 export function getDownloadUrl(path) {
   return `${API_URL}/api/files/${encodeURIComponent(path)}/download`;
 }
