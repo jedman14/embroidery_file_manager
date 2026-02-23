@@ -75,6 +75,8 @@ export async function fetchFiles(path = '') {
       const paths = data.items.map(i => i.path);
       const batch = await fetchTagsBatch(paths);
       tags.update(t => ({ ...t, ...batch.tags }));
+      const notesBatch = await fetchNotesBatch(paths);
+      notes.update(n => ({ ...n, ...notesBatch.notes }));
     }
   } catch (e) {
     error.set(e.message);
@@ -382,6 +384,8 @@ export const tags = writable({});
 /** path -> { tagName: "auto" | "manual" } for badge/tooltip */
 export const tagSources = writable({});
 
+export const notes = writable({});
+
 export async function fetchTags(path) {
   try {
     const response = await fetch(`${API_URL}/api/tags?path=${encodeURIComponent(path)}`);
@@ -559,6 +563,66 @@ export async function fetchTagsBatch(paths) {
   }
 }
 
+export async function fetchNote(path) {
+  try {
+    const response = await fetch(`${API_URL}/api/notes?path=${encodeURIComponent(path)}`);
+    if (!response.ok) throw new Error('Failed to fetch note');
+    const data = await response.json();
+    notes.update(n => ({ ...n, [path]: data.note ?? '' }));
+    return data.note ?? '';
+  } catch (e) {
+    return '';
+  }
+}
+
+export async function fetchNotesBatch(paths) {
+  if (!paths?.length) return { notes: {} };
+  try {
+    const response = await fetch(`${API_URL}/api/notes/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths })
+    });
+    if (!response.ok) return { notes: {} };
+    const data = await response.json();
+    if (data.notes && Object.keys(data.notes).length) {
+      notes.update(n => ({ ...n, ...data.notes }));
+    }
+    return { notes: data.notes || {} };
+  } catch (e) {
+    return { notes: {} };
+  }
+}
+
+export async function setNote(path, note) {
+  const trimmed = typeof note === 'string' ? note.trim() : '';
+  try {
+    if (trimmed) {
+      const response = await fetch(`${API_URL}/api/notes/${encodeURIComponent(path)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: trimmed })
+      });
+      if (!response.ok) throw new Error('Failed to set note');
+      const data = await response.json();
+      notes.update(n => ({ ...n, [path]: data.note ?? trimmed }));
+      return data;
+    } else {
+      const response = await fetch(`${API_URL}/api/notes/${encodeURIComponent(path)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Failed to clear note');
+      notes.update(n => {
+        const next = { ...n };
+        delete next[path];
+        return next;
+      });
+      return await response.json();
+    }
+  } catch (e) {
+    error.set(e.message);
+    throw e;
+  }
+}
+
 export async function searchAllFiles(q, root = '', semantic = false, limit = 500) {
   loading.set(true);
   error.set(null);
@@ -575,8 +639,11 @@ export async function searchAllFiles(q, root = '', semantic = false, limit = 500
       error.set(data.error);
     }
     if (data.items?.length) {
-      const batch = await fetchTagsBatch(data.items.map(i => i.path));
+      const paths = data.items.map(i => i.path);
+      const batch = await fetchTagsBatch(paths);
       tags.update(t => ({ ...t, ...batch.tags }));
+      const notesBatch = await fetchNotesBatch(paths);
+      notes.update(n => ({ ...n, ...notesBatch.notes }));
     }
     return { path: data.path, items: data.items || [], total: data.total ?? 0 };
   } catch (e) {
@@ -602,8 +669,11 @@ export async function searchCurrentThenEverywhere(q, currentPath = '', limit = 5
     const everywhereItems = (everywhereRes.items || []).filter(i => !currentPaths.has(i.path));
     const merged = [...currentItems, ...everywhereItems];
     if (merged.length) {
-      const batch = await fetchTagsBatch(merged.map(i => i.path));
+      const paths = merged.map(i => i.path);
+      const batch = await fetchTagsBatch(paths);
       tags.update(t => ({ ...t, ...batch.tags }));
+      const notesBatch = await fetchNotesBatch(paths);
+      notes.update(n => ({ ...n, ...notesBatch.notes }));
     }
     return { path: currentRoot, items: merged, total: merged.length };
   } catch (e) {

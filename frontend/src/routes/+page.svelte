@@ -43,7 +43,9 @@
     getConvertFormats,
     convertFile,
     getEmbroideryInfo,
-    getEmbroideryInfoBatch
+    getEmbroideryInfoBatch,
+    notes,
+    setNote
   } from '$lib/api.js';
 
   let renameModal = $state(null);
@@ -93,6 +95,11 @@
   let convertFormats = $state({ readable: [], writable: [] });
   let convertLoading = $state(false);
   let convertError = $state(null);
+  let noteModal = $state(null);
+  let noteModalFile = $state(null);
+  let noteText = $state('');
+  let editModalFile = $state(null);
+  let editRenameValue = $state('');
 
   $effect(() => {
     if (typeof document !== 'undefined') {
@@ -446,15 +453,17 @@
     if (!currentFileTags.includes(tagInput)) {
       await setTags(tagModal, [...currentFileTags, tagInput]);
     }
-    fetchFiles($currentPath);
+    if (!editModalFile) fetchFiles($currentPath);
   }
 
   async function handleRemoveTag(tag) {
     if (!tagModal) return;
     const currentFileTags = $tags[tagModal] || [];
     await setTags(tagModal, currentFileTags.filter(t => t !== tag));
-    if (tagFilter) await openTagView(tagFilter);
-    else fetchFiles($currentPath);
+    if (!editModalFile) {
+      if (tagFilter) await openTagView(tagFilter);
+      else fetchFiles($currentPath);
+    }
   }
 
   let fileInput;
@@ -475,6 +484,46 @@
   function openRenameModal(file) {
     renameModal = file.path;
     newName = file.name;
+  }
+
+  function openEditModal(file) {
+    editModalFile = file;
+    editRenameValue = file.name;
+    noteText = $notes[file.path] ?? '';
+    tagModal = file.path;
+    tagModalFile = file;
+    suggestError = null;
+    suggestedTags = [];
+    fetchTags(file.path);
+  }
+
+  function closeEditModal() {
+    editModalFile = null;
+    editRenameValue = '';
+    noteText = '';
+    tagModal = null;
+    tagModalFile = null;
+    suggestError = null;
+    suggestedTags = [];
+  }
+
+  async function handleRenameInEdit() {
+    if (!editModalFile || !editRenameValue.trim()) return;
+    await renameFile(editModalFile.path, editRenameValue.trim());
+    closeEditModal();
+    if (tagFilter) await openTagView(tagFilter);
+    else fetchFiles($currentPath);
+  }
+
+  async function handleSaveNoteInEdit() {
+    if (!editModalFile) return;
+    await setNote(editModalFile.path, noteText);
+  }
+
+  async function handleClearNoteInEdit() {
+    if (!editModalFile) return;
+    await setNote(editModalFile.path, '');
+    noteText = '';
   }
 
   function openMoveModal(file) {
@@ -509,6 +558,30 @@
     logoModal = file.path;
     logoUrl = $folderLogos[file.path] || '';
     logoFile = null;
+  }
+
+  function openNoteModal(file) {
+    noteModal = file.path;
+    noteModalFile = file;
+    noteText = $notes[file.path] ?? '';
+  }
+
+  async function handleSaveNote() {
+    if (noteModal == null) return;
+    await setNote(noteModal, noteText);
+    closeNoteModal();
+  }
+
+  async function handleClearNote() {
+    if (noteModal == null) return;
+    await setNote(noteModal, '');
+    closeNoteModal();
+  }
+
+  function closeNoteModal() {
+    noteModal = null;
+    noteModalFile = null;
+    noteText = '';
   }
 
   function getConvertSavePathDefault() {
@@ -780,7 +853,7 @@
               openPreviewModal(file);
             }
           }}
-          ondblclick={() => !file.is_directory && (openRenameModal(file))}
+          ondblclick={() => !file.is_directory && openEditModal(file)}
           oncontextmenu={(e) => handleContextMenu(e, file)}
         >
           <div class="file-checkbox" onclick={(e) => { e.stopPropagation(); toggleSelect(file.path); }}>
@@ -827,6 +900,11 @@
           {#if searchResults && file.path}
             <div class="file-path-hint" title={file.path}>{file.path}</div>
           {/if}
+          {#if ($notes[file.path] ?? '').length > 0}
+            <div class="file-note-preview" title={$notes[file.path]}>
+              {($notes[file.path] || '').slice(0, 40)}{($notes[file.path] || '').length > 40 ? '…' : ''}
+            </div>
+          {/if}
           <div class="file-info">
             <span class="file-type" style="color: {getFileTypeColor(file.file_type)}">
               {file.file_type}
@@ -842,8 +920,7 @@
             {#if isConvertibleFile(file)}
               <button onclick={(e) => { e.stopPropagation(); openConvertModal(file); }} title="Convert format">🔄</button>
             {/if}
-            <button onclick={(e) => { e.stopPropagation(); openTagModal(file); }} title="Tags">🏷️</button>
-            <button onclick={(e) => { e.stopPropagation(); openRenameModal(file); }} title="Rename">✏️</button>
+            <button onclick={(e) => { e.stopPropagation(); openEditModal(file); }} title="Edit name, tags, notes">✏️</button>
             <button onclick={(e) => { e.stopPropagation(); openMoveModal(file); }} title="Move">📁</button>
             {#if file.is_directory}
               <button onclick={(e) => { e.stopPropagation(); openLogoModal(file); }} title="Folder logo">🖼️</button>
@@ -894,6 +971,9 @@
             {#if searchResults && file.path}
               <span class="list-path-hint" title={file.path}> ({file.path})</span>
             {/if}
+            {#if ($notes[file.path] ?? '').length > 0}
+              <span class="list-note-preview" title={$notes[file.path]}> · {($notes[file.path] || '').slice(0, 30)}{($notes[file.path] || '').length > 30 ? '…' : ''}</span>
+            {/if}
           </span>
           <span class="col-tags">
             {#each ($tags[file.path] || []).slice(0, 3) as tag}
@@ -909,8 +989,7 @@
             {#if isConvertibleFile(file)}
               <button onclick={(e) => { e.stopPropagation(); openConvertModal(file); }} title="Convert format">🔄</button>
             {/if}
-            <button onclick={(e) => { e.stopPropagation(); openTagModal(file); }} title="Tags">🏷️</button>
-            <button onclick={(e) => { e.stopPropagation(); openRenameModal(file); }} title="Rename">✏️</button>
+            <button onclick={(e) => { e.stopPropagation(); openEditModal(file); }} title="Edit name, tags, notes">✏️</button>
             <button onclick={(e) => { e.stopPropagation(); openMoveModal(file); }} title="Move">📁</button>
             {#if file.is_zip}
               <button onclick={(e) => { e.stopPropagation(); openExtractModal(file); }} title="Extract">📦</button>
@@ -925,24 +1004,6 @@
     </div>
   {/if}
 </div>
-
-{#if renameModal}
-  <div class="modal-overlay" onclick={() => renameModal = null}>
-    <div class="modal" onclick={(e) => e.stopPropagation()}>
-      <h3>Rename File</h3>
-      <input 
-        type="text" 
-        bind:value={newName} 
-        placeholder="New name"
-        onkeydown={(e) => e.key === 'Enter' && handleRename()}
-      />
-      <div class="modal-actions">
-        <button class="btn" onclick={() => renameModal = null}>Cancel</button>
-        <button class="btn btn-primary" onclick={handleRename}>Rename</button>
-      </div>
-    </div>
-  </div>
-{/if}
 
 {#if moveModal}
   <div class="modal-overlay" onclick={() => moveModal = null}>
@@ -1118,23 +1179,24 @@
           {/if}
         </div>
       {/if}
-      {#if ($tags[previewFile.path] || []).length > 0}
-        <div class="preview-tags">
-          <span class="preview-tags-label">Tags:</span>
+      <div class="preview-tags">
+        <span class="preview-tags-label">Tags:</span>
+        {#if ($tags[previewFile.path] || []).length > 0}
           {#each $tags[previewFile.path] || [] as tag}
             {@const src = ($tagSources[previewFile.path] || {})[tag]}
             <span class="file-tag-pill clickable" role="button" tabindex="0" title={src === 'auto' ? 'Auto-tagged · Click to show all' : 'Manual · Click to show all'} onclick={() => openTagView(tag)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTagView(tag); } }}>{tag}{#if src === 'auto'}<span class="tag-source-badge" aria-label="Auto-tagged">auto</span>{/if}</span>
           {/each}
-        </div>
-      {/if}
+        {:else}
+          <span class="preview-tags-empty">No tags</span>
+        {/if}
+      </div>
       <div class="preview-actions">
         <button class="btn" onclick={() => downloadFile(previewFile.path)}>⬇️ Download</button>
         {#if isEmbroideryFileType(previewFile.file_type)}
           <button class="btn" onclick={() => { previewModal = false; openConvertModal(previewFile); }}>🔄 Convert</button>
         {/if}
-        <button class="btn" onclick={() => { previewModal = false; openRenameModal(previewFile); }}>✏️ Rename</button>
+        <button class="btn" onclick={() => { previewModal = false; openEditModal(previewFile); }}>✏️ Edit</button>
         <button class="btn" onclick={() => { previewModal = false; openMoveModal(previewFile); }}>📁 Move</button>
-        <button class="btn" onclick={() => { previewModal = false; openTagModal(previewFile); }}>🏷️ Tags</button>
         <button class="btn btn-danger" onclick={async () => { 
           if (confirm(`Delete ${previewFile.name}?`)) {
             await deleteFiles([previewFile.path]);
@@ -1147,7 +1209,7 @@
   </div>
 {/if}
 
-{#if tagModal}
+{#if tagModal && !editModalFile}
   <div class="modal-overlay" onclick={() => { tagModal = null; tagModalFile = null; suggestError = null; suggestedTags = []; }}>
     <div class="modal" onclick={(e) => e.stopPropagation()}>
       <h3>Manage Tags</h3>
@@ -1210,7 +1272,7 @@
         </div>
       {/if}
       <div class="modal-actions">
-        <button class="btn" onclick={() => tagModal = null}>Close</button>
+        <button class="btn" onclick={() => { tagModal = null; tagModalFile = null; suggestError = null; suggestedTags = []; }}>Close</button>
       </div>
     </div>
   </div>
@@ -1290,6 +1352,119 @@
         <button class="btn" onclick={() => { logoModal = null; logoUrl = ''; logoFile = null; }}>Cancel</button>
         <button class="btn btn-danger" onclick={async () => { await removeFolderLogo(logoModal); logoModal = null; logoUrl = ''; logoFile = null; await fetchFolderLogos(); }}>Remove Logo</button>
         <button class="btn btn-primary" onclick={handleSetLogo}>Save</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if noteModal && noteModalFile && !editModalFile}
+  <div class="modal-overlay" onclick={closeNoteModal} role="dialog" aria-modal="true">
+    <div class="modal" onclick={(e) => e.stopPropagation()} role="document">
+      <h3>Note for {noteModalFile.name}</h3>
+      <textarea
+        class="note-textarea"
+        bind:value={noteText}
+        placeholder="Add a note..."
+        rows="4"
+      />
+      <div class="modal-actions">
+        <button class="btn" onclick={closeNoteModal}>Cancel</button>
+        <button class="btn btn-danger" onclick={handleClearNote}>Clear</button>
+        <button class="btn btn-primary" onclick={handleSaveNote}>Save</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if editModalFile}
+  <div class="modal-overlay" onclick={closeEditModal} role="dialog" aria-modal="true">
+    <div class="modal modal-wide" onclick={(e) => e.stopPropagation()} role="document">
+      <h3>Edit {editModalFile.name}</h3>
+
+      <section class="edit-modal-section">
+        <h4 class="edit-section-title">Name</h4>
+        <div class="edit-rename-row">
+          <input 
+            type="text" 
+            bind:value={editRenameValue} 
+            placeholder="Name"
+            onkeydown={(e) => e.key === 'Enter' && handleRenameInEdit()}
+          />
+          <button class="btn btn-primary" onclick={handleRenameInEdit}>Rename</button>
+        </div>
+      </section>
+
+      <section class="edit-modal-section">
+        <h4 class="edit-section-title">Tags</h4>
+        <div class="tag-list">
+          {#each $tags[tagModal] || [] as tag}
+            {@const src = ($tagSources[tagModal] || {})[tag]}
+            <span class="tag">
+              <span class="tag-name-with-source">{tag}{#if src === 'auto'}<span class="tag-source-badge" aria-label="Auto-tagged">auto</span>{/if}</span>
+              <button class="tag-remove" type="button" onclick={() => handleRemoveTag(tag)}>&times;</button>
+            </span>
+          {/each}
+        </div>
+        <div class="tag-input-row">
+          <input 
+            type="text" 
+            id="editModalTagInput"
+            placeholder="Add a tag..."
+            onkeydown={(e) => {
+              if (e.key === 'Enter') {
+                handleAddTag(e.target.value);
+                e.target.value = '';
+              }
+            }}
+          />
+          <button class="btn" type="button" onclick={(e) => {
+            const input = document.getElementById('editModalTagInput');
+            if (input) { handleAddTag(input.value); input.value = ''; }
+          }}>Add</button>
+        </div>
+        {#if tagModalFile && !tagModalFile.is_directory && !tagModalFile.is_zip}
+          <div class="suggest-from-image">
+            <button class="btn" type="button" onclick={handleSuggestFromImage} disabled={suggestLoading}>
+              {suggestLoading ? '…' : 'Suggest from image'}
+            </button>
+            {#if suggestError}<p class="suggest-error">{suggestError}</p>{/if}
+            {#if suggestedTags.length > 0}
+              <div class="suggested-tags-row">
+                <span class="available-tags-label">Suggested:</span>
+                {#each suggestedTags as tag}
+                  <button class="tag-suggestion" type="button" onclick={() => handleAddSuggestedTag(tag)}>{tag}</button>
+                {/each}
+                <button class="btn btn-primary" type="button" onclick={handleAddAllSuggested}>Add all</button>
+              </div>
+            {/if}
+          </div>
+        {/if}
+        {#if availableTags.length > 0}
+          <div class="available-tags">
+            <span class="available-tags-label">Suggestions:</span>
+            {#each availableTags.filter(t => !($tags[tagModal] || []).includes(t)) as tag}
+              <button class="tag-suggestion" type="button" onclick={() => handleAddTag(tag)}>{tag}</button>
+            {/each}
+          </div>
+        {/if}
+      </section>
+
+      <section class="edit-modal-section">
+        <h4 class="edit-section-title">Note</h4>
+        <textarea
+          class="note-textarea"
+          bind:value={noteText}
+          placeholder="Add a note..."
+          rows="3"
+        />
+        <div class="edit-note-actions">
+          <button class="btn btn-danger" type="button" onclick={handleClearNoteInEdit}>Clear</button>
+          <button class="btn btn-primary" type="button" onclick={handleSaveNoteInEdit}>Save note</button>
+        </div>
+      </section>
+
+      <div class="modal-actions">
+        <button class="btn" type="button" onclick={closeEditModal}>Close</button>
       </div>
     </div>
   </div>
@@ -1744,6 +1919,62 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .file-note-preview {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .list-note-preview {
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .note-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    box-sizing: border-box;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    resize: vertical;
+    min-height: 80px;
+  }
+
+  .edit-modal-section {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .edit-modal-section:last-of-type {
+    border-bottom: none;
+  }
+  .edit-section-title {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .edit-rename-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .edit-rename-row input {
+    flex: 1;
+  }
+  .edit-note-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
   }
 
   .search-main { min-width: 220px; }

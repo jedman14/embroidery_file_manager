@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app.api import files, thumbnails, tags, logos
+from app.api import files, thumbnails, tags, logos, notes
 from app.config import settings
 from app.services.auto_tag_service import run_auto_tag_impl
 from app.services.vision_service import OLLAMA_VISION_MODEL
@@ -74,6 +74,7 @@ app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(thumbnails.router, prefix="/api/thumbnails", tags=["thumbnails"])
 app.include_router(tags.router, prefix="/api/tags", tags=["tags"])
 app.include_router(logos.router, prefix="/api/logos", tags=["logos"])
+app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 
 @app.get("/api/health")
 async def health_check():
