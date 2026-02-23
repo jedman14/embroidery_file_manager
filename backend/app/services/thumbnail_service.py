@@ -1,3 +1,4 @@
+import logging
 import os
 import io
 import hashlib
@@ -12,8 +13,14 @@ from app.services.smb_service import SMBService
 if TYPE_CHECKING:
     from PIL import Image
 
+logger = logging.getLogger(__name__)
+
 THUMBNAIL_SIZE = (200, 200)
 PREVIEW_SIZE = (600, 600)
+
+# Image and document types that get thumbnails/previews (not embroidery)
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'}
+PDF_EXTENSIONS = {'.pdf'}
 
 THREAD_COLORS = {
     'default': '#333333',
@@ -55,33 +62,64 @@ class ThumbnailService:
         return thumbnail
     
     async def _generate_thumbnail(self, file_path: str, size: Tuple[int, int]) -> bytes:
-        """Generate thumbnail from embroidery file"""
+        """Generate thumbnail for embroidery, image, or PDF file"""
         file_data = self.smb.get_file(file_path)
-        
         ext = Path(file_path).suffix.lower()
-        
-        if ext == '.dst':
-            return await self._render_embroidery_thumbnail(file_data, size, 'dst')
-        elif ext == '.pes':
-            return await self._render_embroidery_thumbnail(file_data, size, 'pes')
-        if ext == '.dst':
-            return await self._render_embroidery_thumbnail(file_data, size, 'dst')
-        elif ext == '.pes':
-            return await self._render_embroidery_thumbnail(file_data, size, 'pes')
-        elif ext in ['.pec', '.exp', '.vp3', '.jef', '.xxx', '.sew', '.dsz', '.tap', '.hus', '.pcs']:
-            return await self._render_embroidery_thumbnail(file_data, size, ext)
-        elif ext in ['.vip']:
+
+        if ext in IMAGE_EXTENSIONS:
+            return self._render_image_thumbnail(file_data, size, ext)
+        if ext in PDF_EXTENSIONS:
+            return self._render_pdf_thumbnail(file_data, size)
+
+        # Embroidery formats (including .emb for Embroidery by TM)
+        if ext in ['.dst', '.pes']:
+            return await self._render_embroidery_thumbnail(file_data, size, ext.lstrip('.'))
+        if ext in ['.pec', '.exp', '.vp3', '.jef', '.xxx', '.sew', '.dsz', '.tap', '.hus', '.pcs', '.emb']:
+            return await self._render_embroidery_thumbnail(file_data, size, ext.lstrip('.'))
+        if ext == '.vip':
             return self._render_placeholder_thumbnail(ext, size)
-        else:
-            return self._render_placeholder_thumbnail(ext, size)
+        return self._render_placeholder_thumbnail(ext, size)
     
+    def _render_image_thumbnail(self, data: bytes, size: Tuple[int, int], ext: str) -> bytes:
+        """Render thumbnail from image file (jpg, png, etc.)"""
+        try:
+            img = Image.open(io.BytesIO(data))
+            if img.mode in ('RGBA', 'P'):
+                img = img.convert('RGB')
+            img.thumbnail(size, Image.Resampling.LANCZOS)
+            out = Image.new('RGB', size, color='#ffffff')
+            paste_x = (size[0] - img.width) // 2
+            paste_y = (size[1] - img.height) // 2
+            out.paste(img, (paste_x, paste_y))
+            return self._image_to_bytes(out, size)
+        except Exception as e:
+            logger.warning("Image thumbnail failed: %s", e)
+            return self._render_placeholder_thumbnail(ext, size)
+
+    def _render_pdf_thumbnail(self, data: bytes, size: Tuple[int, int]) -> bytes:
+        """Render first page of PDF as thumbnail"""
+        try:
+            import pymupdf
+            doc = pymupdf.open(stream=data, filetype="pdf")
+            if doc.page_count == 0:
+                doc.close()
+                return self._render_placeholder_thumbnail('.pdf', size)
+            page = doc[0]
+            zoom = min(size[0] / page.rect.width, size[1] / page.rect.height)
+            mat = pymupdf.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            doc.close()
+            if img.size != size:
+                img = img.resize(size, Image.Resampling.LANCZOS)
+            return self._image_to_bytes(img, size)
+        except Exception as e:
+            logger.warning("PDF thumbnail failed: %s", e)
+            return self._render_placeholder_thumbnail('.pdf', size)
+
     async def _render_embroidery_thumbnail(self, data: bytes, size: Tuple[int, int], fmt: str) -> bytes:
         """Render thumbnail from embroidery file using pyembroidery"""
         import tempfile
-        import logging
-        
-        logger = logging.getLogger(__name__)
-        
         try:
             # Write to temp file - pyembroidery needs a file path
             suffix = fmt if fmt.startswith('.') else '.' + fmt

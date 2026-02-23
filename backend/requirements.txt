@@ -7,6 +7,7 @@ pysmb>=1.2.0
 Pillow>=10.2.0
 python-dotenv>=1.0.0
 pyembroidery>=1.2.8
+PyMuPDF>=1.24.0
 rapidfuzz>=3.0.0
 openai>=1.0.0
 httpx>=0.25.0

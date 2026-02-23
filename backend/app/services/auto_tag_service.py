@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 EMBROIDERY_EXTENSIONS = {
     ".dst", ".pes", ".pec", ".exp", ".vp3", ".jef", ".xxx", ".sew",
-    ".dsz", ".tap", ".hus", ".pcs", ".ufo", ".emd", ".csd", ".10o",
+    ".dsz", ".tap", ".hus", ".pcs", ".ufo", ".emd", ".emb", ".csd", ".10o",
 }
 
 

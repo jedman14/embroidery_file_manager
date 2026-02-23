@@ -18,10 +18,12 @@ WRITABLE_EXTENSIONS = [
 ]
 
 # Extensions pyembroidery can read (union of writable + read-only in library)
+# .emb = Embroidery by TM (try read; may not be supported by pyembroidery)
 READABLE_EXTENSIONS = [
     ".pes", ".dst", ".exp", ".jef", ".vp3", ".pec", ".xxx",
     ".u01", ".tbf", ".gcode",
     ".10o", ".100", ".bro", ".dat", ".dsb", ".dsz", ".emd",
+    ".emb",
     ".exy", ".fxy", ".gt", ".hus", ".inb", ".jpx", ".ksm",
     ".max", ".mit", ".new", ".pcd", ".pcm", ".pcq", ".pcs",
     ".phb", ".phc", ".sew", ".shv", ".stc", ".stx", ".tap",

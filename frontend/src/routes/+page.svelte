@@ -20,6 +20,7 @@
     downloadFiles,
     createFolder,
     getFileTypeColor,
+    isEmbroideryFileType,
     formatFileSize,
     theme,
     tags,
@@ -486,7 +487,7 @@
   }
 
   function isConvertibleFile(file) {
-    return file && !file.is_directory && !file.is_zip;
+    return file && !file.is_directory && !file.is_zip && isEmbroideryFileType(file.file_type);
   }
 
   async function handleSetLogo() {
@@ -1016,7 +1017,9 @@
       {/if}
       <div class="preview-actions">
         <button class="btn" onclick={() => downloadFile(previewFile.path)}>⬇️ Download</button>
-        <button class="btn" onclick={() => { previewModal = false; openConvertModal(previewFile); }}>🔄 Convert</button>
+        {#if isEmbroideryFileType(previewFile.file_type)}
+          <button class="btn" onclick={() => { previewModal = false; openConvertModal(previewFile); }}>🔄 Convert</button>
+        {/if}
         <button class="btn" onclick={() => { previewModal = false; openRenameModal(previewFile); }}>✏️ Rename</button>
         <button class="btn" onclick={() => { previewModal = false; openMoveModal(previewFile); }}>📁 Move</button>
         <button class="btn" onclick={() => { previewModal = false; openTagModal(previewFile); }}>🏷️ Tags</button>

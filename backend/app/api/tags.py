@@ -21,7 +21,7 @@ router = APIRouter()
 # Extensions that have renderable thumbnails (for suggest-from-image)
 EMBROIDERY_EXTENSIONS = {
     ".dst", ".pes", ".pec", ".exp", ".vp3", ".jef", ".xxx", ".sew",
-    ".dsz", ".tap", ".hus", ".pcs", ".ufo", ".emd", ".csd", ".10o",
+    ".dsz", ".tap", ".hus", ".pcs", ".ufo", ".emd", ".emb", ".csd", ".10o",
 }
 
 def _is_embroidery_file(path: str) -> bool:

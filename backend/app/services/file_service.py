@@ -22,21 +22,32 @@ EMBROIDERY_EXTENSIONS = {
     '.hus': 'Husqvarna',
     '.ufo': 'UFO',
     '.emd': 'Elna',
+    '.emb': 'Embroidery by TM',
     '.csd': 'Singer',
     '.10o': 'Pfaff',
     '.ofm': 'Brother',
     '.pcs': 'Pfaff',
-    '.vpk': 'Pfaff'
+    '.vpk': 'Pfaff',
 }
+IMAGE_EXTENSIONS = {
+    '.jpg': 'JPEG', '.jpeg': 'JPEG', '.png': 'PNG', '.gif': 'GIF',
+    '.webp': 'WebP', '.bmp': 'BMP',
+}
+PDF_EXTENSIONS = {'.pdf': 'PDF'}
 
 class FileService:
     def __init__(self, smb_service: SMBService):
         self.smb = smb_service
     
     def get_file_type(self, filename: str) -> str:
-        """Detect embroidery file type from extension"""
+        """Detect file type from extension (embroidery, image, PDF, or Unknown)"""
         ext = Path(filename).suffix.lower()
-        return EMBROIDERY_EXTENSIONS.get(ext, 'Unknown')
+        return (
+            EMBROIDERY_EXTENSIONS.get(ext)
+            or IMAGE_EXTENSIONS.get(ext)
+            or PDF_EXTENSIONS.get(ext)
+            or 'Unknown'
+        )
     
     def is_zip_file(self, filename: str) -> bool:
         """Check if file is a zip archive"""

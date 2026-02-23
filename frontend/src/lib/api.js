@@ -313,6 +313,15 @@ export async function downloadFiles(paths) {
   }
 }
 
+const EMBROIDERY_FILE_TYPES = [
+  'Tajima', 'Brother', 'Melco', 'Viking', 'Janome', 'Wilcom', 'Husqvarna',
+  'UFO', 'Elna', 'Embroidery by TM', 'Singer', 'Pfaff'
+];
+
+export function isEmbroideryFileType(fileType) {
+  return fileType && EMBROIDERY_FILE_TYPES.includes(fileType);
+}
+
 export function getFileTypeColor(fileType) {
   const colors = {
     'Tajima': '#4a90d9',
@@ -321,6 +330,17 @@ export function getFileTypeColor(fileType) {
     'Viking': '#f4a460',
     'Janome': '#ff6b6b',
     'Wilcom': '#ffd700',
+    'Husqvarna': '#cd853f',
+    'Elna': '#9370db',
+    'Embroidery by TM': '#2e8b57',
+    'Singer': '#dc143c',
+    'Pfaff': '#4682b4',
+    'JPEG': '#c71585',
+    'PNG': '#20b2aa',
+    'GIF': '#ff69b4',
+    'PDF': '#b22222',
+    'WebP': '#32cd32',
+    'BMP': '#696969',
     'Unknown': '#888'
   };
   return colors[fileType] || colors['Unknown'];
