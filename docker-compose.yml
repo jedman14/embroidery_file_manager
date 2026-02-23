@@ -1,0 +1,52 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: embroidery-backend
+    ports:
+      - "8001:8000"
+    env_file:
+      - .env
+    volumes:
+      - thumbnails:/app/thumbnails
+      - logos:/app/logos
+      - data:/app/data
+    networks:
+      - embroidery-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: embroidery-frontend
+    ports:
+      - "5174:5173"
+    env_file:
+      - .env
+    environment:
+      - VITE_API_URL=http://192.168.111.208:8001
+    depends_on:
+      - backend
+    networks:
+      - embroidery-network
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
+    container_name: embroidery-ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - embroidery-network
+
+volumes:
+  thumbnails:
+  logos:
+  data:
+  ollama-data:
+
+networks:
+  embroidery-network:
+    driver: bridge

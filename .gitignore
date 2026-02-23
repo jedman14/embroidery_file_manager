@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv
+venv/
+ENV/
+
+# Node / SvelteKit
+node_modules/
+frontend/node_modules/
+.svelte-kit/
+build/
+dist/
+.npm
+*.local
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs and temp
+*.log
+tmp/
+temp/
+.cache/
+
+# Docker
+.docker/
+
+# Test / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
