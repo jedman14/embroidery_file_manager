@@ -1,6 +1,0 @@
-- Be able to add logos for folder thumbnails. Like a business logo.
-- Be able to tag files for searching.
-- Be able to do full CRUD on files.
-- Dark/Light mode, defaults to what their system is set at.
-- Be able to browse inside zipped files/folders without unzipping.
-- Be able to refresh the page and stay on the page we were on.
