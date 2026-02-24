@@ -150,14 +150,14 @@
   }
 
   function openFilesForTag(tag) {
-    goto('/?tag=' + encodeURIComponent(tag));
+    goto('/browse?tag=' + encodeURIComponent(tag));
   }
 </script>
 
 <div class="app">
   <header class="toolbar">
     <div class="toolbar-left">
-      <a href="/" class="btn">← Back to files</a>
+      <a href="/browse" class="btn">← Back to files</a>
       <button class="btn btn-primary" onclick={openCreate}>Add tag</button>
     </div>
   </header>
