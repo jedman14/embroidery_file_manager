@@ -682,19 +682,21 @@
 <div class="app">
   <header class="toolbar">
     <div class="toolbar-left">
-      <button class="btn" onclick={navigateUp} disabled={!$currentPath}>↑ Up</button>
-      <button class="btn" onclick={() => tagFilter ? openTagView(tagFilter) : fetchFiles($currentPath)}>↻ Refresh</button>
-      <button class="btn" onclick={() => fileInput.click()}>⬆️ Upload</button>
-      <button class="btn" onclick={() => createFolderModal = $currentPath}>📁+ New Folder</button>
-      <button 
-        class="btn" 
-        onclick={handleRunAutoTag} 
-        disabled={autoTagLoading}
-        title="Tag untagged embroidery files (current folder and subfolders)"
-      >
-        {autoTagLoading ? '…' : '🏷️ Auto-tag untagged'}
-      </button>
-      <a href="/tags" class="btn" title="Manage all tags">Tag manager</a>
+      <div class="toolbar-primary">
+        <button class="btn" onclick={navigateUp} disabled={!$currentPath}>↑ Up</button>
+        <button class="btn" onclick={() => tagFilter ? openTagView(tagFilter) : fetchFiles($currentPath)}>↻ Refresh</button>
+        <button class="btn" onclick={() => fileInput.click()}>⬆️ Upload</button>
+        <button class="btn" onclick={() => createFolderModal = $currentPath}>📁+ New Folder</button>
+        <button 
+          class="btn" 
+          onclick={handleRunAutoTag} 
+          disabled={autoTagLoading}
+          title="Tag untagged embroidery files (current folder and subfolders)"
+        >
+          {autoTagLoading ? '…' : '🏷️ Auto-tag'}
+        </button>
+        <a href="/tags" class="btn" title="Manage all tags">Tags</a>
+      </div>
       <input 
         type="file" 
         multiple 
@@ -702,49 +704,54 @@
         bind:this={fileInput} 
         onchange={handleUpload}
       />
-      <input 
-        type="text" 
-        class="search search-main" 
-        placeholder="Search by name, path, or tags…" 
-        bind:value={searchQuery}
-        title="Searches file names, folder paths, and tags. Results are ranked by relevance."
-      />
-      <select class="filter-select" bind:value={searchType}>
-        <option value="all">All Types</option>
-        <option value="Tajima">DST (Tajima)</option>
-        <option value="Brother">PES (Brother)</option>
-        <option value="Melco">EXP (Melco)</option>
-        <option value="Viking">VP3 (Viking)</option>
-        <option value="Janome">JEF (Janome)</option>
-        <option value="Wilcom">XXX (Wilcom)</option>
-      </select>
-      <select class="filter-select" bind:value={searchSize}>
-        <option value="all">Any Size</option>
-        <option value="small">&lt; 100KB</option>
-        <option value="medium">100KB - 1MB</option>
-        <option value="large">&gt; 1MB</option>
-      </select>
-      <input 
-        type="text" 
-        class="search" 
-        placeholder="Filter by tag..." 
-        bind:value={searchTag}
-      />
-      <select class="filter-select" bind:value={hoopFilter} title="Show only files that fit in this hoop or smaller">
-        <option value="all">Hoop: Any</option>
-        <option value="4x4">Up to 4×4 in</option>
-        <option value="5x7">Up to 5×7 in</option>
-        <option value="6x10">Up to 6×10 in</option>
-        <option value="8x8">Up to 8×8 in</option>
-        <option value="9x12">Up to 9×12 in</option>
-      </select>
-      <select class="filter-select" bind:value={colorChangesFilter} title="Show only files with this many color changes or fewer">
-        <option value="all">Color changes: Any</option>
-        <option value="3">Up to 3</option>
-        <option value="5">Up to 5</option>
-        <option value="10">Up to 10</option>
-        <option value="20">Up to 20</option>
-      </select>
+      <details class="filters-details">
+        <summary class="filters-summary">Filters</summary>
+        <div class="filters-inner">
+          <input 
+            type="text" 
+            class="search search-main" 
+            placeholder="Search by name, path, or tags…" 
+            bind:value={searchQuery}
+            title="Searches file names, folder paths, and tags. Results are ranked by relevance."
+          />
+          <select class="filter-select" bind:value={searchType}>
+            <option value="all">All Types</option>
+            <option value="Tajima">DST (Tajima)</option>
+            <option value="Brother">PES (Brother)</option>
+            <option value="Melco">EXP (Melco)</option>
+            <option value="Viking">VP3 (Viking)</option>
+            <option value="Janome">JEF (Janome)</option>
+            <option value="Wilcom">XXX (Wilcom)</option>
+          </select>
+          <select class="filter-select" bind:value={searchSize}>
+            <option value="all">Any Size</option>
+            <option value="small">&lt; 100KB</option>
+            <option value="medium">100KB - 1MB</option>
+            <option value="large">&gt; 1MB</option>
+          </select>
+          <input 
+            type="text" 
+            class="search" 
+            placeholder="Filter by tag..." 
+            bind:value={searchTag}
+          />
+          <select class="filter-select" bind:value={hoopFilter} title="Show only files that fit in this hoop or smaller">
+            <option value="all">Hoop: Any</option>
+            <option value="4x4">Up to 4×4 in</option>
+            <option value="5x7">Up to 5×7 in</option>
+            <option value="6x10">Up to 6×10 in</option>
+            <option value="8x8">Up to 8×8 in</option>
+            <option value="9x12">Up to 9×12 in</option>
+          </select>
+          <select class="filter-select" bind:value={colorChangesFilter} title="Show only files with this many color changes or fewer">
+            <option value="all">Color changes: Any</option>
+            <option value="3">Up to 3</option>
+            <option value="5">Up to 5</option>
+            <option value="10">Up to 10</option>
+            <option value="20">Up to 20</option>
+          </select>
+        </div>
+      </details>
     </div>
     <div class="toolbar-right">
       <button class="btn" onclick={() => theme.toggle()}>
@@ -1531,6 +1538,28 @@
     align-items: center;
   }
 
+  .toolbar-primary {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .filters-details {
+    display: contents;
+  }
+
+  .filters-details summary {
+    display: none;
+  }
+
+  .filters-inner {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
   .btn {
     padding: 8px 16px;
     border: 1px solid var(--border-color);
@@ -1602,6 +1631,8 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .breadcrumb-item {
@@ -1784,6 +1815,12 @@
 
   .file-card:hover .file-actions {
     display: flex;
+  }
+
+  @media (pointer: coarse) {
+    .file-card .file-actions {
+      display: flex;
+    }
   }
 
   .file-actions button {
@@ -2357,5 +2394,130 @@
     margin-top: 20px;
     padding-top: 16px;
     border-top: 1px solid var(--border-color);
+  }
+
+  @media (max-width: 768px) {
+    .toolbar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+
+    .toolbar-left {
+      flex-wrap: wrap;
+    }
+
+    .toolbar-right {
+      flex-wrap: wrap;
+    }
+
+    .filters-details {
+      display: block;
+      width: 100%;
+    }
+
+    .filters-summary {
+      display: block;
+      padding: 8px 12px;
+      cursor: pointer;
+      list-style: none;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--bg-tertiary);
+      font-size: 14px;
+    }
+
+    .filters-summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .filters-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .filters-inner .search,
+    .filters-inner .filter-select {
+      width: 100%;
+      min-width: 0;
+      font-size: 16px;
+    }
+
+    .breadcrumb {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .toolbar-secondary {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .file-grid {
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .file-card {
+      padding: 10px;
+    }
+
+    .file-actions button {
+      min-width: 44px;
+      min-height: 44px;
+      padding: 6px;
+    }
+
+    .file-list {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .list-header,
+    .list-row {
+      grid-template-columns: 36px 1fr minmax(80px, 1fr) 70px 70px 90px;
+      min-width: 480px;
+    }
+
+    .list-header {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    .col-name {
+      min-width: 0;
+    }
+
+    .modal,
+    .modal.modal-wide {
+      min-width: 0;
+      max-width: 95vw;
+      max-height: 90vh;
+      overflow: auto;
+      padding: 16px;
+    }
+
+    .preview-modal {
+      max-width: 95vw;
+      max-height: 90vh;
+      overflow: auto;
+      padding: 16px;
+    }
+
+    .btn {
+      min-height: 44px;
+      min-width: 44px;
+    }
+
+    .search-main {
+      min-width: 0;
+    }
   }
 </style>

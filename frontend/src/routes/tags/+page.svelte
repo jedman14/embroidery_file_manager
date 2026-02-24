@@ -197,6 +197,19 @@
           {/each}
         </tbody>
       </table>
+      <div class="tag-cards">
+        {#each tagList as row}
+          <div class="tag-card">
+            <button type="button" class="tag-card-name" onclick={() => openFilesForTag(row.name)} title="Show files with this tag">{row.name}</button>
+            <span class="tag-card-count">{row.count} file(s)</span>
+            <div class="tag-card-actions">
+              <button class="btn btn-sm" onclick={() => openRename(row.name)}>Rename</button>
+              <button class="btn btn-sm" onclick={() => openMerge(row.name)}>Merge</button>
+              <button class="btn btn-sm btn-danger" onclick={() => openDelete(row.name)}>Delete</button>
+            </div>
+          </div>
+        {/each}
+      </div>
     {/if}
   </main>
 </div>
@@ -563,6 +576,88 @@
 
   .tag-name-btn:hover {
     color: var(--text-primary);
+  }
+
+  .tag-cards {
+    display: none;
+  }
+
+  .tag-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+
+  .tag-card-name {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 0 0 4px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--accent-color);
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .tag-card-name:hover {
+    color: var(--text-primary);
+  }
+
+  .tag-card-count {
+    display: block;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
+
+  .tag-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .tag-card-actions .btn {
+    min-height: 44px;
+  }
+
+  @media (max-width: 768px) {
+    .tag-table {
+      display: none;
+    }
+
+    .tag-cards {
+      display: block;
+    }
+
+    .toolbar {
+      flex-wrap: wrap;
+    }
+
+    .content {
+      padding: 16px;
+    }
+
+    .modal,
+    .modal.modal-wide {
+      min-width: 0;
+      max-width: 95vw;
+      max-height: 90vh;
+      overflow: auto;
+      padding: 16px;
+    }
+
+    .modal input[type='text'] {
+      font-size: 16px;
+    }
+
+    .btn {
+      min-height: 44px;
+    }
   }
 
   .files-with-tag-list {
