@@ -114,7 +114,11 @@
     return (p || '').split('/').filter(Boolean).map(encodeURIComponent).join('/');
   }
 
-  const pathFromUrl = $derived($page.params.path ?? '');
+  const pathFromUrl = $derived(
+    Array.isArray($page.params.path)
+      ? $page.params.path.join('/')
+      : ($page.params.path ?? '')
+  );
 
   $effect(() => {
     const p = pathFromUrl;
@@ -718,7 +722,7 @@
         bind:this={fileInput} 
         onchange={handleUpload}
       />
-      <details class="filters-details">
+      <details class="filters-details" open>
         <summary class="filters-summary">Filters</summary>
         <div class="filters-inner">
           <input 
