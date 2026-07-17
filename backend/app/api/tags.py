@@ -234,9 +234,22 @@ async def suggest_tags(path: str):
 @router.post("/run-auto-tag")
 async def run_auto_tag(path: str = ""):
     """
-    Run vision-based tagging on all untagged embroidery files under path (default: root).
-    Only files that have no tags yet are processed.
+    Start vision-based tagging in background on all untagged embroidery files under path.
+    Returns immediately. Poll GET /api/tags/auto-tag-status for progress.
     """
-    from app.services.auto_tag_service import run_auto_tag_impl
-    result = await run_auto_tag_impl(root_path=path)
-    return result
+    import asyncio
+    from app.services.auto_tag_service import run_auto_tag_impl, get_auto_tag_status
+
+    status = await get_auto_tag_status()
+    if status.get("running"):
+        return {"status": "already_running"}
+
+    asyncio.create_task(run_auto_tag_impl(root_path=path))
+    return {"status": "started"}
+
+
+@router.get("/auto-tag-status")
+async def auto_tag_status():
+    """Return current auto-tag progress (running, total, processed, errors, current_file, elapsed_seconds)."""
+    from app.services.auto_tag_service import get_auto_tag_status
+    return await get_auto_tag_status()

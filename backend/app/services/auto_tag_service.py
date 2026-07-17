@@ -2,7 +2,9 @@
 Auto-tag embroidery files from vision: suggest_and_save_tags (single file),
 run_auto_tag_impl (batch, only untagged). Used by run-auto-tag endpoint, nightly job, and upload.
 """
+import asyncio
 import logging
+import time
 from pathlib import Path
 from typing import List
 
@@ -13,6 +15,38 @@ from app.services.vision_service import suggest_tags_from_image
 from app.services.tag_storage import load_tags, save_tags, tag_names, SOURCE_AUTO
 
 logger = logging.getLogger(__name__)
+
+_status_lock = asyncio.Lock()
+_auto_tag_status = {
+    "running": False,
+    "finished": False,
+    "total": 0,
+    "processed": 0,
+    "errors": [],
+    "current_file": "",
+    "start_time": None,
+    "elapsed_seconds": 0,
+}
+
+
+async def get_auto_tag_status() -> dict:
+    async with _status_lock:
+        status = dict(_auto_tag_status)
+        if status["start_time"] is not None:
+            status["elapsed_seconds"] = time.time() - status["start_time"]
+        return status
+
+
+async def reset_auto_tag_status():
+    async with _status_lock:
+        _auto_tag_status["running"] = False
+        _auto_tag_status["finished"] = False
+        _auto_tag_status["total"] = 0
+        _auto_tag_status["processed"] = 0
+        _auto_tag_status["errors"] = []
+        _auto_tag_status["current_file"] = ""
+        _auto_tag_status["start_time"] = None
+        _auto_tag_status["elapsed_seconds"] = 0
 
 EMBROIDERY_EXTENSIONS = {
     ".dst", ".pes", ".pec", ".exp", ".vp3", ".jef", ".xxx", ".sew",
@@ -85,14 +119,25 @@ async def run_auto_tag_impl(root_path: str = "") -> dict:
     """
     Find untagged embroidery files under root_path, run vision and save tags.
     Returns {"processed": int, "skipped": int, "errors": list}.
+    Updates global _auto_tag_status for progress polling.
     """
     all_paths = _list_embroidery_paths_under(root_path)
     data = load_tags()
     untagged = [p for p in all_paths if not tag_names(data.get(p, []))]
     skipped = len(all_paths) - len(untagged)
+    async with _status_lock:
+        _auto_tag_status["running"] = True
+        _auto_tag_status["finished"] = False
+        _auto_tag_status["total"] = len(untagged)
+        _auto_tag_status["processed"] = 0
+        _auto_tag_status["errors"] = []
+        _auto_tag_status["current_file"] = ""
+        _auto_tag_status["start_time"] = time.time()
     processed = 0
     errors: List[str] = []
     for path in untagged:
+        async with _status_lock:
+            _auto_tag_status["current_file"] = path
         try:
             result = await suggest_and_save_tags(path)
             if result is not None:
@@ -102,4 +147,11 @@ async def run_auto_tag_impl(root_path: str = "") -> dict:
         except Exception as e:
             logger.warning("Auto-tag failed for %s: %s", path, e)
             errors.append(f"{path}: {e}")
+        async with _status_lock:
+            _auto_tag_status["processed"] = processed
+            _auto_tag_status["errors"] = list(errors)
+    async with _status_lock:
+        _auto_tag_status["running"] = False
+        _auto_tag_status["finished"] = True
+        _auto_tag_status["current_file"] = ""
     return {"processed": processed, "skipped": skipped, "errors": errors}

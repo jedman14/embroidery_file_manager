@@ -35,6 +35,7 @@
     getAllTags,
     suggestTags,
     runAutoTag,
+    getAutoTagStatus,
     folderLogos,
     fetchFolderLogos,
     setFolderLogo,
@@ -84,7 +85,8 @@
   let renameFolderModal = $state(null);
   let renameFolderName = $state('');
   let autoTagLoading = $state(false);
-  let autoTagResult = $state(null); // { processed, skipped, errors } or null
+  let autoTagStatus = $state(null); // { running, finished, total, processed, errors, current_file, elapsed_seconds } or null
+  let autoTagPollTimer = $state(null);
   let tagFilter = $state(null); // when set, view shows only files with this tag (same UX as folder)
   let tagViewFiles = $state([]);
   let tagViewLoading = $state(false);
@@ -716,19 +718,44 @@
 
   async function handleRunAutoTag() {
     autoTagLoading = true;
-    autoTagResult = null;
+    autoTagStatus = null;
     error.set(null);
     try {
       const r = await runAutoTag($currentPath);
-      autoTagResult = r;
-      fetchFiles($currentPath);
-      const allTags = await getAllTags();
-      availableTags = allTags.tags;
+      if (r.status === 'already_running') {
+        autoTagStatus = await getAutoTagStatus();
+      } else {
+        autoTagStatus = { running: true, finished: false, total: 0, processed: 0, errors: [], current_file: '', start_time: null, elapsed_seconds: 0 };
+      }
     } catch (e) {
       error.set(e.message);
-    } finally {
       autoTagLoading = false;
+      return;
     }
+    autoTagPollTimer = setInterval(async () => {
+      if (autoTagStatus === null) {
+        clearInterval(autoTagPollTimer);
+        autoTagPollTimer = null;
+        autoTagLoading = false;
+        return;
+      }
+      try {
+        const s = await getAutoTagStatus();
+        autoTagStatus = s;
+        if (!s.running && s.finished) {
+          clearInterval(autoTagPollTimer);
+          autoTagPollTimer = null;
+          autoTagLoading = false;
+          fetchFiles($currentPath);
+          const allTags = await getAllTags().catch(() => ({}));
+          if (allTags.tags) availableTags = allTags.tags;
+        }
+      } catch (e) {
+        clearInterval(autoTagPollTimer);
+        autoTagPollTimer = null;
+        autoTagLoading = false;
+      }
+    }, 1500);
   }
 </script>
 
@@ -1342,27 +1369,53 @@
   </div>
 {/if}
 
-{#if autoTagResult !== null}
-  <div class="modal-overlay" onclick={() => autoTagResult = null} role="dialog">
-    <div class="modal" onclick={(e) => e.stopPropagation()}>
-      <h3>Auto-tag complete</h3>
-      <p class="modal-hint">
-        Processed: {autoTagResult.processed} · Skipped (already tagged): {autoTagResult.skipped}
-      </p>
-      {#if autoTagResult.errors?.length > 0}
-        <p class="suggest-error">Errors: {autoTagResult.errors.length}</p>
-        <ul class="auto-tag-errors">
-          {#each autoTagResult.errors.slice(0, 10) as err}
-            <li>{typeof err === 'string' ? err : err}</li>
-          {/each}
-          {#if autoTagResult.errors.length > 10}
-            <li>… and {autoTagResult.errors.length - 10} more</li>
+{#if autoTagStatus !== null}
+  <div class="modal-overlay" onclick={() => { autoTagStatus = null; if (autoTagPollTimer) { clearInterval(autoTagPollTimer); autoTagPollTimer = null; autoTagLoading = false; } }} role="dialog">
+    <div class="modal auto-tag-progress-modal" onclick={(e) => e.stopPropagation()}>
+      {#if autoTagStatus.running}
+        <h3>🏷️ Auto-tagging…</h3>
+        <div class="auto-tag-progress">
+          <div class="auto-tag-spinner"></div>
+          <p class="auto-tag-counts">
+            {autoTagStatus.processed} / {autoTagStatus.total} files
+          </p>
+          {#if autoTagStatus.elapsed_seconds > 0}
+            <p class="auto-tag-elapsed">
+              Elapsed: {Math.floor(autoTagStatus.elapsed_seconds / 60)}m {Math.floor(autoTagStatus.elapsed_seconds % 60)}s
+            </p>
           {/if}
-        </ul>
+          {#if autoTagStatus.current_file}
+            <p class="auto-tag-file" title={autoTagStatus.current_file}>
+              {autoTagStatus.current_file.split('/').pop()}
+            </p>
+          {/if}
+          {#if autoTagStatus.errors?.length > 0}
+            <p class="auto-tag-errors-count">{autoTagStatus.errors.length} error{autoTagStatus.errors.length !== 1 ? 's' : ''} so far</p>
+          {/if}
+        </div>
+        <div class="modal-actions">
+          <button class="btn" onclick={() => { autoTagStatus = null; if (autoTagPollTimer) { clearInterval(autoTagPollTimer); autoTagPollTimer = null; autoTagLoading = false; } }}>Close</button>
+        </div>
+      {:else if autoTagStatus.finished}
+        <h3>🏷️ Auto-tag complete</h3>
+        <p class="modal-hint">
+          Processed: {autoTagStatus.processed} · Total files scanned: {autoTagStatus.total}
+        </p>
+        {#if autoTagStatus.errors?.length > 0}
+          <p class="suggest-error">Errors: {autoTagStatus.errors.length}</p>
+          <ul class="auto-tag-errors">
+            {#each autoTagStatus.errors.slice(0, 10) as err}
+              <li>{typeof err === 'string' ? err : err}</li>
+            {/each}
+            {#if autoTagStatus.errors.length > 10}
+              <li>… and {autoTagStatus.errors.length - 10} more</li>
+            {/if}
+          </ul>
+        {/if}
+        <div class="modal-actions">
+          <button class="btn" onclick={() => { autoTagStatus = null; if (autoTagPollTimer) { clearInterval(autoTagPollTimer); autoTagPollTimer = null; } }}>Close</button>
+        </div>
       {/if}
-      <div class="modal-actions">
-        <button class="btn" onclick={() => autoTagResult = null}>Close</button>
-      </div>
     </div>
   </div>
 {/if}
@@ -2315,6 +2368,58 @@
     color: var(--danger-color);
     max-height: 120px;
     overflow-y: auto;
+  }
+
+  .auto-tag-progress-modal .modal {
+    min-width: 340px;
+  }
+
+  .auto-tag-progress {
+    text-align: center;
+    padding: 16px 0;
+  }
+
+  .auto-tag-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: auto-tag-spin 0.8s linear infinite;
+    margin: 0 auto 12px;
+  }
+
+  @keyframes auto-tag-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .auto-tag-counts {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+
+  .auto-tag-elapsed {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0 0 4px;
+  }
+
+  .auto-tag-file {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 4px 0 0;
+    word-break: break-all;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .auto-tag-errors-count {
+    font-size: 12px;
+    color: var(--danger-color);
+    margin: 4px 0 0;
   }
 
   .folder-logo {

@@ -541,6 +541,15 @@ export async function runAutoTag(path = '') {
   return await response.json();
 }
 
+export async function getAutoTagStatus() {
+  const response = await fetch(`${API_URL}/api/tags/auto-tag-status`);
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || response.statusText || 'Failed to get auto-tag status');
+  }
+  return await response.json();
+}
+
 export async function fetchTagsBatch(paths) {
   if (!paths?.length) return { tags: {}, tag_sources: {} };
   try {
