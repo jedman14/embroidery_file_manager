@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from app.api import files, thumbnails, tags, logos, notes
 from app.config import settings
 from app.services.auto_tag_service import run_auto_tag_impl
+from app.services.tag_storage import load_tags, invalidate_tag_cache
 from app.services.vision_service import OLLAMA_VISION_MODEL
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,12 @@ async def _ensure_ollama_model():
 async def lifespan(app: FastAPI):
     if settings.ollama_base_url:
         asyncio.create_task(_ensure_ollama_model())
+    try:
+        load_tags()
+        asyncio.create_task(files.file_service.warm_cache())
+        logger.info("Cache warmed: tags and file index loaded")
+    except Exception:
+        logger.warning("Cache warm-up failed (will populate on first request)", exc_info=True)
     scheduler = AsyncIOScheduler()
     async def nightly_auto_tag():
         try:

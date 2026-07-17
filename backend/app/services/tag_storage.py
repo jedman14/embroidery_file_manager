@@ -52,23 +52,38 @@ def tag_sources_map(entries: list[dict]) -> dict[str, str]:
     return {e["name"]: (e.get("source") or SOURCE_MANUAL) for e in entries if e.get("name")}
 
 
+_tag_cache: dict[str, list[dict]] | None = None
+
+
+def invalidate_tag_cache():
+    global _tag_cache
+    _tag_cache = None
+
+
 def load_tags() -> dict[str, list[dict]]:
-    """Load tags file and return path -> list of {name, source}. Migrates legacy format."""
+    global _tag_cache
+    if _tag_cache is not None:
+        return _tag_cache
     if not os.path.exists(TAGS_FILE):
+        _tag_cache = {}
         return {}
     try:
         with open(TAGS_FILE, "r") as f:
             raw = json.load(f)
     except Exception:
+        _tag_cache = {}
         return {}
     if not isinstance(raw, dict):
+        _tag_cache = {}
         return {}
-    return {path: _normalize_entry(val) for path, val in raw.items() if path}
+    _tag_cache = {path: _normalize_entry(val) for path, val in raw.items() if path}
+    return _tag_cache
 
 
 def save_tags(data: dict[str, list[dict]]) -> None:
-    """Save path -> list of {name, source} to file."""
+    global _tag_cache
     os.makedirs(os.path.dirname(TAGS_FILE), exist_ok=True)
     serialized = {path: _serialize_entry(entries) for path, entries in data.items() if path and entries}
     with open(TAGS_FILE, "w") as f:
         json.dump(serialized, f)
+    _tag_cache = {path: _normalize_entry(val) for path, val in serialized.items()}

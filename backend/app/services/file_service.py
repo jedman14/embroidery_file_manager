@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import unicodedata
 import zipfile
 from io import BytesIO
@@ -38,6 +39,8 @@ PDF_EXTENSIONS = {'.pdf': 'PDF'}
 class FileService:
     def __init__(self, storage):  # SMBService, LocalStorageService, or StorageRouter
         self._storage = storage
+        self._items_cache: dict[str, tuple[list, float]] = {}
+        self._cache_ttl: float = 60.0
     
     def get_file_type(self, filename: str) -> str:
         """Detect file type from extension (embroidery, image, PDF, or Unknown)"""
@@ -53,6 +56,21 @@ class FileService:
         """Check if file is a zip archive"""
         return filename.lower().endswith('.zip')
     
+    def _get_cached_items(self, root: str, max_items: int = 6000) -> list:
+        now = time.time()
+        entry = self._items_cache.get(root)
+        if entry and (now - entry[1]) <= self._cache_ttl:
+            return entry[0]
+        items = self._list_directory_recursive(root, max_items)
+        self._items_cache[root] = (items, now)
+        return items
+
+    def invalidate_cache(self):
+        self._items_cache.clear()
+
+    async def warm_cache(self, root: str = "", max_items: int = 6000):
+        self._items_cache[root] = (self._list_directory_recursive(root, max_items), time.time())
+
     async def list_directory(self, path: str) -> List[dict]:
         """List directory contents with file type detection"""
         items = self._storage.list_directory(path)
@@ -201,7 +219,7 @@ class FileService:
         """
         path_tags = path_tags or {}
         try:
-            all_items = self._list_directory_recursive(root or "", max_items=6000)
+            all_items = self._get_cached_items(root or "", max_items=6000)
         except Exception:
             return {"path": root, "items": [], "total": 0}
 
@@ -320,6 +338,7 @@ class FileService:
             self._storage.create_directory_recursive(dir_path)
         
         self._storage.put_file(path, data)
+        self.invalidate_cache()
         
         return {
             "success": True,
@@ -335,6 +354,7 @@ class FileService:
         
         self._storage.rename(path, new_path)
         migrate_metadata(path, new_path)
+        self.invalidate_cache()
         return {
             "success": True,
             "old_path": path,
@@ -344,6 +364,7 @@ class FileService:
     async def create_folder(self, path: str) -> dict:
         """Create a new folder"""
         self._storage.create_directory(path)
+        self.invalidate_cache()
         return {
             "success": True,
             "path": path,
@@ -357,6 +378,7 @@ class FileService:
                 self._storage.delete_directory_recursive(path)
             else:
                 self._storage.delete_file(path)
+            self.invalidate_cache()
             return {"success": True, "deleted": [path]}
         except Exception as e:
             return {"success": False, "deleted": [], "error": str(e)}
@@ -375,6 +397,7 @@ class FileService:
             except Exception as e:
                 errors.append(f"{path}: {str(e)}")
         
+        self.invalidate_cache()
         return {"success": len(errors) == 0, "deleted": deleted, "errors": errors}
     
     async def move_file(self, source: str, destination: str) -> dict:
@@ -386,6 +409,7 @@ class FileService:
         
         self._storage.move(source, destination)
         migrate_metadata(source, destination)
+        self.invalidate_cache()
         return {
             "success": True,
             "source": source,
@@ -420,6 +444,7 @@ class FileService:
                 self._storage.put_file(member_path, data)
                 extracted.append(member_path)
         
+        self.invalidate_cache()
         return {
             "success": True,
             "extracted": extracted,
