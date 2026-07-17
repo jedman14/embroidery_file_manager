@@ -66,6 +66,7 @@
   let moveDestination = $state('');
   let extractDestination = $state('');
   let searchQuery = $state('');
+  let mobileSearchOpen = $state(false);
   let searchType = $state('all');
   let searchSize = $state('all');
   let searchTag = $state('');
@@ -114,6 +115,23 @@
     return (p || '').split('/').filter(Boolean).map(encodeURIComponent).join('/');
   }
 
+  function updateSearchUrl(q) {
+    const url = new URL($page.url);
+    if (q) {
+      url.searchParams.set('q', q);
+    } else {
+      url.searchParams.delete('q');
+    }
+    history.replaceState(history.state, '', url);
+  }
+
+  function toggleMobileSearch() {
+    mobileSearchOpen = !mobileSearchOpen;
+    if (mobileSearchOpen) {
+      setTimeout(() => document.querySelector('.search-main')?.focus(), 150);
+    }
+  }
+
   const pathFromUrl = $derived(
     Array.isArray($page.params.path)
       ? $page.params.path.join('/')
@@ -124,7 +142,11 @@
     const p = pathFromUrl;
     currentPath.set(p);
     const tagFromUrl = $page.url.searchParams.get('tag');
-    if (!tagFromUrl) {
+    const qFromUrl = $page.url.searchParams.get('q');
+    if (qFromUrl && !searchQuery) {
+      searchQuery = qFromUrl;
+    }
+    if (!tagFromUrl && !qFromUrl) {
       if (tagFilter) {
         tagFilter = null;
         tagViewFiles = [];
@@ -241,13 +263,22 @@
     const q = searchQuery.trim();
     if (!q) {
       searchResults = null;
+      updateSearchUrl('');
       return;
     }
     let cancelled = false;
     const t = setTimeout(() => {
       searchCurrentThenEverywhere(q, $currentPath, 500).then((data) => {
-        if (!cancelled) searchResults = data;
-      }).catch(() => { if (!cancelled) searchResults = { items: [], path: '', total: 0 }; });
+        if (!cancelled) {
+          searchResults = data;
+          updateSearchUrl(q);
+        }
+      }).catch(() => {
+        if (!cancelled) {
+          searchResults = { items: [], path: '', total: 0 };
+          updateSearchUrl(q);
+        }
+      });
     }, 320);
     return () => { cancelled = true; clearTimeout(t); };
   });
@@ -307,6 +338,8 @@
     tagFilter = null;
     tagViewFiles = [];
     searchResults = null;
+    searchQuery = '';
+    mobileSearchOpen = false;
     if (browsingZip && path === '') {
       const parentPath = browsingZip.split('/').slice(0, -1).join('/');
       browsingZip = null;
@@ -325,6 +358,8 @@
       return;
     }
     searchResults = null;
+    searchQuery = '';
+    mobileSearchOpen = false;
     if (browsingZip) {
       const parentPath = browsingZip.split('/').slice(0, -1).join('/');
       browsingZip = null;
@@ -714,6 +749,7 @@
           {autoTagLoading ? '…' : '🏷️ Auto-tag'}
         </button>
         <a href="/tags" class="btn" title="Manage all tags">Tags</a>
+        <button class="btn mobile-search-toggle" onclick={toggleMobileSearch} title="Search">🔍</button>
       </div>
       <input 
         type="file" 
@@ -728,6 +764,7 @@
           <input 
             type="text" 
             class="search search-main" 
+            class:visible={mobileSearchOpen}
             placeholder="Search by name, path, or tags…" 
             bind:value={searchQuery}
             title="Searches file names, folder paths, and tags. Results are ranked by relevance."
@@ -2405,6 +2442,8 @@
     border-top: 1px solid var(--border-color);
   }
 
+  .mobile-search-toggle { display: none; }
+
   @media (max-width: 768px) {
     .toolbar {
       flex-direction: column;
@@ -2419,6 +2458,11 @@
     .toolbar-right {
       flex-wrap: wrap;
     }
+
+    .mobile-search-toggle { display: inline-flex; }
+
+    .search-main { display: none; }
+    .search-main.visible { display: block; }
 
     .filters-details {
       display: block;
